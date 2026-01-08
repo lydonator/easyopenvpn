@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN Portal - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1>OpenVPN Portal Dashboard</h1>
+        <a href="/logout" class="logout-link">Logout</a>
+    </div>
+
+    <div class="container">
+        <div id="message-container"></div>
+
+        <div class="card">
+            <h2>Server Information</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Public IP Address</div>
+                    <div class="info-value">{{ server_ip }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">OpenVPN Port</div>
+                    <div class="info-value">1194 UDP</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Portal Port</div>
+                    <div class="info-value">443 HTTPS</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>VPN Clients</h2>
+            <div id="client-list-container">
+                <div class="loading">Loading clients...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Create New Client</h2>
+            <form id="create-client-form">
+                <div class="form-group">
+                    <label for="client-name">Client Name</label>
+                    <input
+                        type="text"
+                        id="client-name"
+                        name="client_name"
+                        pattern="[a-zA-Z0-9_-]+"
+                        title="Only letters, numbers, dashes, and underscores allowed"
+                        required
+                        placeholder="e.g., laptop-john, phone-mary"
+                    >
+                    <div id="client-name-error" class="error-message hidden"></div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Client</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Format file size in human-readable format
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Show message to user
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            const className = type === 'success' ? 'success-message' : 'alert-error';
+            container.innerHTML = `<div class="${className}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        // Load client list from API
+        async function loadClients() {
+            const container = document.getElementById('client-list-container');
+
+            try {
+                const response = await fetch('/api/clients');
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to load clients');
+                }
+
+                const data = await response.json();
+                const clients = data.clients || [];
+
+                if (clients.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>No VPN clients yet. Create one below to get started.</p>
+                        </div>
+                    `;
+                } else {
+                    let tableHtml = `
+                        <table class="client-list-table">
+                            <thead>
+                                <tr>
+                                    <th>Client Name</th>
+                                    <th>File Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    clients.forEach(client => {
+                        tableHtml += `
+                            <tr>
+                                <td>${client.name}</td>
+                                <td>${formatFileSize(client.size)}</td>
+                                <td>
+                                    <button class="btn btn-download" onclick="downloadClient('${client.name}')">Download</button>
+                                    <button class="btn btn-delete" onclick="deleteClient('${client.name}')">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHtml += `
+                            </tbody>
+                        </table>
+                    `;
+                    container.innerHTML = tableHtml;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="alert-error">Error loading clients: ${error.message}</div>`;
+            }
+        }
+
+        // Download client configuration
+        function downloadClient(clientName) {
+            window.location.href = `/download/${clientName}`;
+        }
+
+        // Delete client with confirmation
+        async function deleteClient(clientName) {
+            if (!confirm(`Are you sure you want to delete client "${clientName}"? This will revoke the certificate and remove the configuration file.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/clients/${clientName}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage(data.error || 'Failed to delete client', 'error');
+                    return;
+                }
+
+                showMessage(`Client "${clientName}" deleted successfully`, 'success');
+                loadClients();
+            } catch (error) {
+                showMessage(`Error deleting client: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle create client form submission
+        document.getElementById('create-client-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const clientNameInput = document.getElementById('client-name');
+            const clientName = clientNameInput.value.trim();
+            const errorDiv = document.getElementById('client-name-error');
+
+            // Clear previous errors
+            errorDiv.classList.add('hidden');
+            clientNameInput.classList.remove('error');
+
+            // Validate client name
+            if (!clientName) {
+                errorDiv.textContent = 'Client name is required';
+                errorDiv.classList.remove('hidden');
+                clientNameInput.classList.add('error');
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_-]+$/.test(clientName)) {
+                errorDiv.textContent = 'Invalid client name. Use only letters, numbers, dashes, and underscores.';
+                errorDiv.classList.remove('hidden');
+                clientNameInput.classList.add('error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/clients', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ client_name: clientName })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage(data.error || 'Failed to create client', 'error');
+                    return;
+                }
+
+                showMessage(`Client "${clientName}" created successfully`, 'success');
+                clientNameInput.value = '';
+                loadClients();
+            } catch (error) {
+                showMessage(`Error creating client: ${error.message}`, 'error');
+            }
+        });
+
+        // Load clients on page load
+        loadClients();
+    </script>
+</body>
+</html>
