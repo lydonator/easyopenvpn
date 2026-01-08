@@ -269,21 +269,171 @@ generate_server_certs() {
 generate_server_certs
 
 ################################################################################
+# Server Configuration
+################################################################################
+
+create_server_config() {
+    echo "Creating OpenVPN server configuration..."
+
+    # Create server.conf in /etc/openvpn/server/
+    cat > "$OPENVPN_DIR/server.conf" <<EOF
+# Network configuration
+port 1194
+proto udp
+dev tun
+server 10.8.0.0 255.255.255.0
+
+# Certificate and key files
+ca ca.crt
+cert server.crt
+key server.key
+dh dh.pem
+tls-crypt tc.key
+
+# Security settings
+cipher AES-128-GCM
+auth SHA256
+tls-version-min 1.2
+
+# Networking
+keepalive 10 120
+persist-key
+persist-tun
+
+# DNS - push Google DNS to clients
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 8.8.8.8"
+push "dhcp-option DNS 8.8.4.4"
+
+# Logging
+status /var/log/openvpn/openvpn-status.log
+verb 3
+mute 20
+explicit-exit-notify 1
+EOF
+
+    # Create log directory
+    mkdir -p /var/log/openvpn || error_exit "Failed to create log directory"
+
+    # Verify config created
+    [[ -f "$OPENVPN_DIR/server.conf" ]] || error_exit "Server config not created"
+
+    echo "✓ Server configuration created"
+}
+
+# Run server configuration
+create_server_config
+
+################################################################################
+# Firewall Configuration
+################################################################################
+
+configure_firewall() {
+    echo "Configuring firewall and networking..."
+
+    # Get interface with default route
+    NET_INTERFACE=$(ip route show default | awk '{print $5; exit}')
+    [[ -z "$NET_INTERFACE" ]] && error_exit "Could not detect network interface"
+    echo "Detected network interface: $NET_INTERFACE"
+
+    # Enable IP forwarding in sysctl.conf
+    # Check if already enabled (idempotency)
+    if ! grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+    fi
+
+    # Apply immediately
+    sysctl -p || error_exit "Failed to apply sysctl settings"
+
+    # Set DEFAULT_FORWARD_POLICY to ACCEPT
+    sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+
+    # Insert NAT rules in /etc/ufw/before.rules
+    # Check if already present (idempotency)
+    if ! grep -q "openvpn" /etc/ufw/before.rules; then
+        # Find line with *filter and insert NAT rules before it
+        sed -i "/^\*filter/i # NAT table rules for OpenVPN\n*nat\n:POSTROUTING ACCEPT [0:0]\n-A POSTROUTING -s 10.8.0.0/24 -o $NET_INTERFACE -j MASQUERADE\nCOMMIT\n" /etc/ufw/before.rules
+    fi
+
+    # Allow OpenVPN port through UFW
+    ufw allow 1194/udp comment 'OpenVPN server' || error_exit "Failed to allow OpenVPN port"
+
+    # Enable UFW if not already enabled
+    # Check if UFW is active
+    if ! ufw status | grep -q "Status: active"; then
+        echo "y" | ufw enable || error_exit "Failed to enable UFW"
+    else
+        # Reload to apply new rules
+        ufw reload || error_exit "Failed to reload UFW"
+    fi
+
+    # Verify IP forwarding enabled
+    [[ "$(cat /proc/sys/net/ipv4/ip_forward)" == "1" ]] || error_exit "IP forwarding not enabled"
+
+    echo "✓ Firewall configured with NAT/masquerading"
+}
+
+# Run firewall configuration
+configure_firewall
+
+################################################################################
+# Service Management
+################################################################################
+
+start_openvpn_service() {
+    echo "Starting OpenVPN service..."
+
+    # Reload systemd daemon
+    systemctl daemon-reload || error_exit "Failed to reload systemd daemon"
+
+    # Enable OpenVPN service to start on boot
+    systemctl enable openvpn-server@server || error_exit "Failed to enable OpenVPN service"
+
+    # Start OpenVPN service
+    systemctl start openvpn-server@server || error_exit "Failed to start OpenVPN service"
+
+    # Wait 2 seconds for service to initialize
+    sleep 2
+
+    # Verify service is running
+    if ! systemctl is-active --quiet openvpn-server@server; then
+        error_exit "OpenVPN service failed to start. Check: journalctl -u openvpn-server@server -n 50"
+    fi
+
+    # Verify TUN interface created
+    if ! ip link show tun0 &>/dev/null; then
+        error_exit "TUN interface not created. Check: journalctl -u openvpn-server@server -n 50"
+    fi
+
+    # Display service status
+    echo "✓ OpenVPN service started successfully"
+    systemctl status openvpn-server@server --no-pager | head -10
+
+    echo "✓ OpenVPN server running on UDP port 1194"
+}
+
+# Run service management
+start_openvpn_service
+
+################################################################################
 # Installation complete
 ################################################################################
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "Certificate generation complete!"
+echo "OpenVPN Server Installation Complete!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "Summary:"
 echo "  - OS: $ID $OS_VERSION"
-echo "  - OpenVPN: Installed"
+echo "  - OpenVPN: Installed and running"
 echo "  - Easy-RSA: Installed ($EASYRSA_PKG_DIR)"
 echo "  - Public IP: $PUBLIC_IP"
 echo "  - PKI: Initialized with CA certificate"
 echo "  - Server certificates: Generated and installed"
+echo "  - Server configuration: Created with security settings"
+echo "  - Firewall: Configured with NAT/masquerading"
+echo "  - Service: Running on UDP port 1194"
 echo ""
-echo "Next steps will configure OpenVPN server and networking..."
+echo "Next steps will add client management capabilities..."
 echo ""
