@@ -416,24 +416,132 @@ start_openvpn_service() {
 start_openvpn_service
 
 ################################################################################
+# Client Certificate Generation
+################################################################################
+
+generate_client_cert() {
+    CLIENT_NAME="${1:-client1}"
+
+    # Ensure client name is alphanumeric with dashes/underscores only
+    if ! [[ "$CLIENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        error_exit "Invalid client name. Use only letters, numbers, dashes, and underscores."
+    fi
+
+    echo "Generating client certificate for '$CLIENT_NAME'..."
+
+    cd "$EASYRSA_DIR" || error_exit "Failed to change to Easy-RSA directory"
+
+    # Check if client already exists (idempotency)
+    if [[ -f "pki/issued/${CLIENT_NAME}.crt" ]]; then
+        echo "Client certificate for '$CLIENT_NAME' already exists, skipping generation"
+        return 0
+    fi
+
+    # Generate client certificate and key
+    EASYRSA_BATCH=1 ./easyrsa build-client-full "$CLIENT_NAME" nopass || error_exit "Failed to generate client certificate for $CLIENT_NAME"
+
+    # Verify client certificate created
+    [[ -f "pki/issued/${CLIENT_NAME}.crt" ]] || error_exit "Client certificate not found after generation"
+    [[ -f "pki/private/${CLIENT_NAME}.key" ]] || error_exit "Client private key not found after generation"
+
+    # Create client config directory
+    mkdir -p "$CLIENT_DIR" || error_exit "Failed to create client directory"
+
+    echo "✓ Client certificate generated"
+}
+
+################################################################################
+# Client Configuration File Generation
+################################################################################
+
+create_client_ovpn() {
+    CLIENT_NAME="${1:-client1}"
+    OVPN_FILE="$CLIENT_DIR/${CLIENT_NAME}.ovpn"
+
+    echo "Creating client configuration file..."
+
+    # Create base client configuration
+    cat > "$OVPN_FILE" <<EOF
+# EasyOpenVPN client configuration for $CLIENT_NAME
+client
+dev tun
+proto udp
+remote $PUBLIC_IP 1194
+
+# Security
+cipher AES-128-GCM
+auth SHA256
+tls-version-min 1.2
+
+# Connection
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+
+# Logging
+verb 3
+mute 20
+EOF
+
+    # Append inline CA certificate
+    echo "<ca>" >> "$OVPN_FILE"
+    cat "$OPENVPN_DIR/ca.crt" >> "$OVPN_FILE"
+    echo "</ca>" >> "$OVPN_FILE"
+
+    # Append inline client certificate
+    echo "<cert>" >> "$OVPN_FILE"
+    # Extract certificate part only (skip bag attributes and key)
+    openssl x509 -in "$EASYRSA_DIR/pki/issued/${CLIENT_NAME}.crt" >> "$OVPN_FILE" || error_exit "Failed to extract client certificate"
+    echo "</cert>" >> "$OVPN_FILE"
+
+    # Append inline client private key
+    echo "<key>" >> "$OVPN_FILE"
+    cat "$EASYRSA_DIR/pki/private/${CLIENT_NAME}.key" >> "$OVPN_FILE"
+    echo "</key>" >> "$OVPN_FILE"
+
+    # Append inline tls-crypt key
+    echo "<tls-crypt>" >> "$OVPN_FILE"
+    cat "$OPENVPN_DIR/tc.key" >> "$OVPN_FILE"
+    echo "</tls-crypt>" >> "$OVPN_FILE"
+
+    # Set file permissions
+    chmod 600 "$OVPN_FILE" || error_exit "Failed to set permissions on client config"
+
+    # Verify config file created
+    [[ -f "$OVPN_FILE" ]] || error_exit "Client config file not created"
+
+    echo "✓ Client configuration created: $OVPN_FILE"
+    echo "  Download this file and import it into your OpenVPN client"
+}
+
+################################################################################
+# Generate First Client
+################################################################################
+
+# Generate first client certificate and configuration
+generate_client_cert "client1"
+create_client_ovpn "client1"
+
+################################################################################
 # Installation complete
 ################################################################################
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "OpenVPN Server Installation Complete!"
+echo "OpenVPN Installation Complete!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
-echo "Summary:"
-echo "  - OS: $ID $OS_VERSION"
-echo "  - OpenVPN: Installed and running"
-echo "  - Easy-RSA: Installed ($EASYRSA_PKG_DIR)"
-echo "  - Public IP: $PUBLIC_IP"
-echo "  - PKI: Initialized with CA certificate"
-echo "  - Server certificates: Generated and installed"
-echo "  - Server configuration: Created with security settings"
-echo "  - Firewall: Configured with NAT/masquerading"
-echo "  - Service: Running on UDP port 1194"
+echo "Server is running on: $PUBLIC_IP:1194"
 echo ""
-echo "Next steps will add client management capabilities..."
+echo "Client configuration: $CLIENT_DIR/client1.ovpn"
+echo ""
+echo "Download this file and import it into your OpenVPN client:"
+echo "  - Windows/Mac/Linux: OpenVPN GUI or OpenVPN Connect"
+echo "  - iOS/Android: OpenVPN Connect app"
+echo ""
+echo "To create additional clients, re-run this installer"
+echo "(future: will be handled via web portal)"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
 echo ""
