@@ -25,8 +25,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Web Portal Foundation** - HTTPS web interface with password authentication and session management
 - [x] **Phase 3: Client Management** - Create/delete clients and generate platform-agnostic VPN configs
 - [x] **Phase 4: Testing & Polish** - Cross-platform validation and production readiness
-- [ ] **Phase 5: Docker Prerequisites & Host Setup** - Auto-install Docker/Compose, configure host networking for containers
-- [ ] **Phase 6: Containerized OpenVPN & Portal** - Dockerfile, docker-compose orchestration, containerized services
+- [x] **Phase 5: Docker Prerequisites & Host Setup** - Auto-install Docker/Compose, configure host networking for containers
+- [ ] **Phase 6: Containerized OpenVPN & Portal** - Dockerfile, docker-compose orchestration, containerized services (in progress)
 - [ ] **Phase 7: Docker Testing & Documentation** - Container-specific testing, updated documentation
 
 ## Phase Details
@@ -101,7 +101,8 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: TBD (run /gsd:plan-phase 6 to break down)
+- [x] 06-01: OpenVPN Container Structure - Dockerfile, docker-entrypoint.sh with PKI initialization
+- [ ] 06-02: TBD (pending planning)
 
 #### Phase 7: Docker Testing & Documentation
 **Goal**: Update testing procedures and documentation for containerized deployment
@@ -124,5 +125,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Client Management | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 4. Testing & Polish | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 5. Docker Prerequisites & Host Setup | v1.1 | 2/2 | Complete | 2026-01-08 |
-| 6. Containerized OpenVPN & Portal | v1.1 | 0/? | Not started | - |
+| 6. Containerized OpenVPN & Portal | v1.1 | 1/? | In progress | - |
 | 7. Docker Testing & Documentation | v1.1 | 0/? | Not started | - |
