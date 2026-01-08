@@ -101,6 +101,74 @@ else
 fi
 
 ################################################################################
+# Docker Installation
+################################################################################
+
+install_docker() {
+    echo "Checking Docker installation..."
+
+    # Check if Docker is installed
+    if ! command -v docker &>/dev/null; then
+        echo "Installing Docker Engine..."
+        curl -fsSL https://get.docker.com -o get-docker.sh || error_exit "Failed to download Docker installation script"
+        sh get-docker.sh || error_exit "Docker installation failed"
+        rm get-docker.sh
+        echo "✓ Docker installed successfully"
+    else
+        echo "✓ Docker already installed ($(docker --version))"
+    fi
+
+    # Check if Docker daemon is running
+    if ! systemctl is-active --quiet docker; then
+        echo "Starting Docker daemon..."
+        systemctl start docker || error_exit "Failed to start Docker daemon"
+        systemctl enable docker || error_exit "Failed to enable Docker daemon"
+        echo "✓ Docker daemon started"
+    else
+        echo "✓ Docker daemon is running"
+    fi
+}
+
+# Run Docker installation
+install_docker
+
+################################################################################
+# Docker Compose v2 and TUN Module Verification
+################################################################################
+
+verify_docker_prerequisites() {
+    echo "Verifying Docker prerequisites..."
+
+    # Verify Docker Compose v2 is available
+    if docker compose version &>/dev/null; then
+        COMPOSE_VERSION=$(docker compose version --short)
+        echo "✓ Docker Compose v2 available ($COMPOSE_VERSION)"
+    else
+        error_exit "Docker Compose v2 not available. Docker installation may have failed."
+    fi
+
+    # Check if TUN module is loaded
+    if ! lsmod | grep -q "^tun"; then
+        echo "Loading TUN kernel module..."
+        modprobe tun || error_exit "Failed to load TUN kernel module"
+        # Make persistent across reboots
+        echo "tun" > /etc/modules-load.d/tun.conf || error_exit "Failed to configure TUN module persistence"
+        echo "✓ TUN module loaded"
+    else
+        echo "✓ TUN module already loaded"
+    fi
+
+    # Verify /dev/net/tun exists
+    if ! test -c /dev/net/tun; then
+        error_exit "TUN device /dev/net/tun not available. Cannot proceed with VPN setup."
+    fi
+    echo "✓ TUN device available: /dev/net/tun"
+}
+
+# Run Docker prerequisites verification
+verify_docker_prerequisites
+
+################################################################################
 # Main installation starts here
 ################################################################################
 
