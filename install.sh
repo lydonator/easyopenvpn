@@ -80,25 +80,8 @@ echo "Detected OS: $ID $VERSION_ID"
 # Store version for later use
 OS_VERSION="$VERSION_ID"
 
-# Detect if this is an update/re-run
-if systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "Detected existing OpenVPN installation"
-    echo "═══════════════════════════════════════════════════════════════"
-    echo ""
-    echo "This script is idempotent - it will:"
-    echo "  ✓ Update components that need updating"
-    echo "  ✓ Skip components that are already configured"
-    echo "  ✓ Preserve existing clients and certificates"
-    echo ""
-    IS_UPDATE=true
-else
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "Fresh installation detected"
-    echo "═══════════════════════════════════════════════════════════════"
-    echo ""
-    IS_UPDATE=false
-fi
+# Container-based installation - container provides clean slate
+# No complex idempotency checks needed for host-based OpenVPN installation
 
 ################################################################################
 # Docker Installation
@@ -167,6 +150,56 @@ verify_docker_prerequisites() {
 
 # Run Docker prerequisites verification
 verify_docker_prerequisites
+
+################################################################################
+# Host Network Configuration for Containers
+################################################################################
+
+configure_host_networking() {
+    echo "Configuring host networking for containers..."
+
+    # Task 1: Configure UFW firewall rules for container ports
+    if command -v ufw &>/dev/null; then
+        echo "  Configuring firewall rules for container ports..."
+        ufw allow 1194/udp comment 'OpenVPN container' 2>/dev/null || true
+        ufw allow 443/tcp comment 'Web portal container' 2>/dev/null || true
+
+        if ufw status | grep -q "Status: active"; then
+            ufw reload
+            echo "✓ Firewall rules configured"
+        else
+            echo "⚠ UFW installed but inactive. Please enable UFW manually: ufw enable"
+        fi
+    else
+        echo "⚠ UFW not installed, skipping firewall configuration"
+    fi
+
+    # Task 2: Enable IP forwarding for VPN routing
+    echo "  Enabling IP forwarding..."
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null
+
+    # Persist IP forwarding on boot
+    if ! grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+    fi
+    echo "✓ IP forwarding enabled"
+
+    # Configure UFW forward policy for container traffic
+    if [[ -f /etc/default/ufw ]]; then
+        echo "  Configuring UFW forward policy for container traffic..."
+        sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+
+        if ufw status | grep -q "Status: active"; then
+            ufw reload >/dev/null 2>&1
+        fi
+        echo "✓ UFW forward policy configured"
+    fi
+
+    echo "✓ Host networking configured for containers"
+}
+
+# Run host network configuration
+configure_host_networking
 
 ################################################################################
 # Main installation starts here
@@ -1801,11 +1834,7 @@ finalize_portal
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-if [[ "$IS_UPDATE" == "true" ]]; then
-    echo "EasyOpenVPN Update Complete!"
-else
-    echo "EasyOpenVPN Installation Complete!"
-fi
+echo "EasyOpenVPN Installation Complete!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "OpenVPN Server: $PUBLIC_IP:1194"
@@ -1814,14 +1843,10 @@ echo "Web Portal: https://$PUBLIC_IP:8443"
 
 # Display portal password
 if [[ -f /root/.openvpn-portal-password ]]; then
-    if [[ "$IS_UPDATE" == "true" ]]; then
-        echo "Password: (unchanged from previous installation)"
-    else
-        PORTAL_PASS=$(cat /root/.openvpn-portal-password)
-        echo "Password: $PORTAL_PASS"
-        echo ""
-        echo "SAVE THIS PASSWORD - you'll need it to manage clients!"
-    fi
+    PORTAL_PASS=$(cat /root/.openvpn-portal-password)
+    echo "Password: $PORTAL_PASS"
+    echo ""
+    echo "SAVE THIS PASSWORD - you'll need it to manage clients!"
 fi
 
 echo ""

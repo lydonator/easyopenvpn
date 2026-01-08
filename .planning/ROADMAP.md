@@ -91,6 +91,7 @@ Plans:
 
 Plans:
 - [x] 05-01: Docker Installation & Prerequisites - Docker Engine, Compose v2, TUN module
+- [x] 05-02: Host Network Configuration - UFW rules, IP forwarding, simplified installer
 
 #### Phase 6: Containerized OpenVPN & Portal
 **Goal**: Create Dockerfile and docker-compose.yml to run OpenVPN server and Flask portal in containers
@@ -122,6 +123,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Web Portal Foundation | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 3. Client Management | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 4. Testing & Polish | v1.0 | 2/2 | Complete | 2026-01-08 |
-| 5. Docker Prerequisites & Host Setup | v1.1 | 1/? | In progress | - |
+| 5. Docker Prerequisites & Host Setup | v1.1 | 2/2 | Complete | 2026-01-08 |
 | 6. Containerized OpenVPN & Portal | v1.1 | 0/? | Not started | - |
 | 7. Docker Testing & Documentation | v1.1 | 0/? | Not started | - |
