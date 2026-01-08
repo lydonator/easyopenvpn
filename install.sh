@@ -343,6 +343,11 @@ generate_server_certs() {
     cp pki/dh.pem "$OPENVPN_DIR/" || error_exit "Failed to copy DH parameters"
     cp pki/tc.key "$OPENVPN_DIR/" || error_exit "Failed to copy tls-crypt key"
 
+    # Generate initial empty CRL for certificate revocation
+    ./easyrsa gen-crl || error_exit "Failed to generate initial CRL"
+    cp pki/crl.pem "$OPENVPN_DIR/" || error_exit "Failed to copy CRL"
+    chmod 644 "$OPENVPN_DIR/crl.pem" || error_exit "Failed to set CRL permissions"
+
     # Set correct permissions
     chmod 600 "$OPENVPN_DIR/server.key" || error_exit "Failed to set server key permissions"
     chmod 600 "$OPENVPN_DIR/tc.key" || error_exit "Failed to set tls-crypt key permissions"
@@ -374,6 +379,9 @@ cert server.crt
 key server.key
 dh dh.pem
 tls-crypt tc.key
+
+# Certificate Revocation List
+crl-verify crl.pem
 
 # Security settings
 cipher AES-128-GCM
@@ -601,6 +609,107 @@ EOF
 }
 
 ################################################################################
+# Client Deletion Function
+################################################################################
+
+delete_client() {
+    CLIENT_NAME="${1}"
+
+    # Validate client name is provided
+    if [[ -z "$CLIENT_NAME" ]]; then
+        error_exit "Client name is required for deletion"
+    fi
+
+    # Validate client name format (same regex as generate_client_cert)
+    if ! [[ "$CLIENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        error_exit "Invalid client name. Use only letters, numbers, dashes, and underscores."
+    fi
+
+    echo "Deleting client '$CLIENT_NAME'..."
+
+    # Check if client certificate exists
+    if [[ ! -f "$EASYRSA_DIR/pki/issued/${CLIENT_NAME}.crt" ]]; then
+        error_exit "Client certificate for '$CLIENT_NAME' not found"
+    fi
+
+    # Change to Easy-RSA directory
+    cd "$EASYRSA_DIR" || error_exit "Failed to change to Easy-RSA directory"
+
+    # Revoke client certificate
+    echo "Revoking certificate..."
+    # Use 'yes' to auto-confirm revocation
+    EASYRSA_BATCH=1 ./easyrsa revoke "$CLIENT_NAME" || error_exit "Failed to revoke certificate for $CLIENT_NAME"
+
+    # Regenerate CRL
+    echo "Regenerating CRL..."
+    ./easyrsa gen-crl || error_exit "Failed to regenerate CRL"
+
+    # Copy updated CRL to OpenVPN directory
+    cp pki/crl.pem "$OPENVPN_DIR/crl.pem" || error_exit "Failed to copy updated CRL"
+    chmod 644 "$OPENVPN_DIR/crl.pem" || error_exit "Failed to set CRL permissions"
+
+    # Remove client configuration file
+    if [[ -f "$CLIENT_DIR/${CLIENT_NAME}.ovpn" ]]; then
+        rm -f "$CLIENT_DIR/${CLIENT_NAME}.ovpn" || error_exit "Failed to remove client configuration file"
+        echo "✓ Removed client configuration file"
+    fi
+
+    # Remove certificate files (optional - keep for audit trail, but noted in plan to remove)
+    if [[ -f "$EASYRSA_DIR/pki/issued/${CLIENT_NAME}.crt" ]]; then
+        rm -f "$EASYRSA_DIR/pki/issued/${CLIENT_NAME}.crt"
+        echo "✓ Removed client certificate"
+    fi
+
+    if [[ -f "$EASYRSA_DIR/pki/private/${CLIENT_NAME}.key" ]]; then
+        rm -f "$EASYRSA_DIR/pki/private/${CLIENT_NAME}.key"
+        echo "✓ Removed client private key"
+    fi
+
+    # Restart OpenVPN service to reload CRL
+    echo "Restarting OpenVPN service..."
+    systemctl restart openvpn-server@server || error_exit "Failed to restart OpenVPN service"
+
+    # Wait for service to restart
+    sleep 2
+
+    # Verify service is running
+    if ! systemctl is-active --quiet openvpn-server@server; then
+        error_exit "OpenVPN service failed to restart after client deletion"
+    fi
+
+    echo "✓ Client '$CLIENT_NAME' deleted successfully"
+    return 0
+}
+
+################################################################################
+# Client Listing Function
+################################################################################
+
+list_clients() {
+    # Create client directory if it doesn't exist
+    mkdir -p "$CLIENT_DIR" || return 1
+
+    # Find all .ovpn files in CLIENT_DIR
+    # Use pure bash JSON output to avoid jq dependency
+    for ovpn in "$CLIENT_DIR"/*.ovpn; do
+        # Check if file exists (handles case when no .ovpn files exist)
+        [[ -f "$ovpn" ]] || continue
+
+        # Extract filename and client name
+        basename="${ovpn##*/}"
+        name="${basename%.ovpn}"
+
+        # Get file size (Linux stat format)
+        size=$(stat -c%s "$ovpn" 2>/dev/null || echo "0")
+
+        # Output JSON line
+        echo "{\"name\":\"$name\",\"file\":\"$ovpn\",\"size\":$size}"
+    done
+
+    return 0
+}
+
+################################################################################
 # Generate First Client
 ################################################################################
 
@@ -688,13 +797,25 @@ create_flask_app() {
     # Create Flask application
     cat > "$APP_FILE" <<EOF
 #!/usr/bin/env python3
-from flask import Flask, session, redirect, render_template, request, url_for
+from flask import Flask, session, redirect, render_template, request, url_for, jsonify
 import bcrypt
 import os
+import subprocess
+import re
 
 app = Flask(__name__)
 app.secret_key = '$SECRET_KEY'
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+
+# Login required decorator
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 def index():
@@ -741,6 +862,130 @@ def dashboard():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/api/clients/create', methods=['POST'])
+@login_required
+def create_client():
+    try:
+        client_name = request.json.get('client_name', '').strip()
+
+        # Validate client name (alphanumeric with dashes/underscores only)
+        if not client_name:
+            return jsonify({'error': 'Client name is required'}), 400
+
+        if not re.match(r'^[a-zA-Z0-9_-]+$', client_name):
+            return jsonify({'error': 'Invalid client name. Use only letters, numbers, dashes, and underscores.'}), 400
+
+        # Check if client already exists
+        client_file = f'/root/openvpn-clients/{client_name}.ovpn'
+        if os.path.exists(client_file):
+            return jsonify({'error': f'Client {client_name} already exists'}), 400
+
+        # Call generate_client_cert function
+        result = subprocess.run(
+            ['/bin/bash', '-c', f'source /root/install.sh && generate_client_cert "{client_name}"'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            return jsonify({'error': f'Failed to generate client certificate: {result.stderr}'}), 500
+
+        # Call create_client_ovpn function
+        result = subprocess.run(
+            ['/bin/bash', '-c', f'source /root/install.sh && create_client_ovpn "{client_name}"'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            return jsonify({'error': f'Failed to create client configuration: {result.stderr}'}), 500
+
+        # Verify client file was created
+        if not os.path.exists(client_file):
+            return jsonify({'error': 'Client file not created'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': f'Client {client_name} created successfully',
+            'client_name': client_name,
+            'file': client_file
+        }), 200
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Client creation timed out'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/api/clients/list', methods=['GET'])
+@login_required
+def list_clients():
+    try:
+        # Call list_clients bash function
+        result = subprocess.run(
+            ['/bin/bash', '-c', 'source /root/install.sh && list_clients'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            return jsonify({'error': f'Failed to list clients: {result.stderr}'}), 500
+
+        # Parse JSON output from bash function (one JSON object per line)
+        clients = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                import json
+                clients.append(json.loads(line))
+
+        return jsonify({'clients': clients}), 200
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Client listing timed out'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/api/clients/delete', methods=['POST'])
+@login_required
+def delete_client():
+    try:
+        client_name = request.json.get('client_name', '').strip()
+
+        # Validate client name
+        if not client_name:
+            return jsonify({'error': 'Client name is required'}), 400
+
+        if not re.match(r'^[a-zA-Z0-9_-]+$', client_name):
+            return jsonify({'error': 'Invalid client name'}), 400
+
+        # Check if client exists
+        client_file = f'/root/openvpn-clients/{client_name}.ovpn'
+        if not os.path.exists(client_file):
+            return jsonify({'error': f'Client {client_name} does not exist'}), 400
+
+        # Call delete_client bash function
+        result = subprocess.run(
+            ['/bin/bash', '-c', f'source /root/install.sh && delete_client "{client_name}"'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            return jsonify({'error': f'Failed to delete client: {result.stderr}'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': f'Client {client_name} deleted successfully'
+        }), 200
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Client deletion timed out'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8443,
