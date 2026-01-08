@@ -84,9 +84,9 @@ EOF
 
 echo "✅ Server configuration generated"
 
-# Enable IP forwarding
+# Enable IP forwarding (may fail in container if not privileged - that's OK if host has it enabled)
 echo "🌐 Enabling IP forwarding..."
-sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv4.ip_forward=1 || echo "⚠ Could not set IP forwarding (requires host-level configuration)"
 
 # Set up iptables NAT for VPN subnet
 echo "🔥 Configuring iptables NAT..."

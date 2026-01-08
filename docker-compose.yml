@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  openvpn:
+    build:
+      context: ./openvpn
+      dockerfile: Dockerfile
+    container_name: easyopenvpn-server
+    cap_add:
+      - NET_ADMIN
+      - MKNOD
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "1194:1194/udp"
+    volumes:
+      - openvpn-pki:/etc/openvpn/easy-rsa
+      - openvpn-config:/etc/openvpn/server
+      - openvpn-logs:/var/log/openvpn
+    environment:
+      - SERVER_IP=${SERVER_IP}
+      - VPN_SUBNET=10.8.0.0
+      - VPN_NETMASK=255.255.255.0
+      - VPN_PORT=1194
+      - VPN_PROTOCOL=udp
+      - DNS_SERVER=8.8.8.8
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    container_name: easyopenvpn-portal
+    depends_on:
+      - openvpn
+    ports:
+      - "443:443/tcp"
+    volumes:
+      - openvpn-pki:/etc/openvpn/easy-rsa:ro
+      - portal-certs:/app/certs
+      - portal-data:/app/data
+    environment:
+      - PORTAL_PASSWORD_HASH=${PORTAL_PASSWORD_HASH}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - SERVER_IP=${SERVER_IP}
+    restart: unless-stopped
+
+volumes:
+  openvpn-pki:
+  openvpn-config:
+  openvpn-logs:
+  portal-certs:
+  portal-data:
