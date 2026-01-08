@@ -2,7 +2,12 @@
 
 ## Overview
 
-Transform a blank VPS into a fully functional VPN server with a single curl command. Users install OpenVPN through an automated script, then manage all clients through a secure web portal. The journey: installer foundation → web interface → client lifecycle management → production-ready validation.
+Transform a blank VPS into a fully functional VPN server with a single curl command. Users install OpenVPN through an automated script, then manage all clients through a secure web portal. The journey: installer foundation → web interface → client lifecycle management → production-ready validation → containerized deployment.
+
+## Milestones
+
+- ✅ **v1.0 MVP** - Phases 1-4 (shipped 2026-01-08)
+- 🚧 **v1.1 Docker Upgrade** - Phases 5-7 (in progress)
 
 ## Domain Expertise
 
@@ -19,9 +24,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Installer & OpenVPN Setup** - Curl | bash installer with automated OpenVPN server configuration
 - [x] **Phase 2: Web Portal Foundation** - HTTPS web interface with password authentication and session management
 - [x] **Phase 3: Client Management** - Create/delete clients and generate platform-agnostic VPN configs
-- [ ] **Phase 4: Testing & Polish** - Cross-platform validation and production readiness
+- [x] **Phase 4: Testing & Polish** - Cross-platform validation and production readiness
+- [ ] **Phase 5: Docker Prerequisites & Host Setup** - Auto-install Docker/Compose, configure host networking for containers
+- [ ] **Phase 6: Containerized OpenVPN & Portal** - Dockerfile, docker-compose orchestration, containerized services
+- [ ] **Phase 7: Docker Testing & Documentation** - Container-specific testing, updated documentation
 
 ## Phase Details
+
+<details>
+<summary>✅ v1.0 MVP (Phases 1-4) - SHIPPED 2026-01-08</summary>
 
 ### Phase 1: Installer & OpenVPN Setup
 **Goal**: Single-command installer that provisions a working OpenVPN server with self-signed certificates
@@ -63,16 +74,54 @@ Plans:
 
 Plans:
 - [x] 04-01: Script Validation & Documentation - Shellcheck validation, README.md, TESTING.md, production readiness
-- [ ] 04-02: Manual Testing & Production Validation - Execute testing procedures, verify production readiness
+- [x] 04-02: Manual Testing & Production Validation - Execute testing procedures, verify production readiness
+
+</details>
+
+### 🚧 v1.1 Docker Upgrade (In Progress)
+
+**Milestone Goal:** Transform the bash installer from host-based installation to containerized deployment, automatically installing Docker prerequisites and running OpenVPN + portal services in containers.
+
+#### Phase 5: Docker Prerequisites & Host Setup
+**Goal**: Detect and install Docker/Docker Compose if missing, configure host for containerized services
+**Depends on**: Phase 4 (v1.0 complete)
+**Research**: Likely (Docker installation patterns, container networking)
+**Research topics**: Docker/Docker Compose installation on Ubuntu/Debian, container port mapping for UDP and TCP, firewall configuration for containerized services
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: TBD (run /gsd:plan-phase 5 to break down)
+
+#### Phase 6: Containerized OpenVPN & Portal
+**Goal**: Create Dockerfile and docker-compose.yml to run OpenVPN server and Flask portal in containers
+**Depends on**: Phase 5
+**Research**: Likely (OpenVPN containerization, volume management)
+**Research topics**: OpenVPN Docker best practices, persistent volume management for certificates/configs, multi-container networking
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: TBD (run /gsd:plan-phase 6 to break down)
+
+#### Phase 7: Docker Testing & Documentation
+**Goal**: Update testing procedures and documentation for containerized deployment
+**Depends on**: Phase 6
+**Research**: Unlikely (documentation update, existing testing patterns adapted)
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD (run /gsd:plan-phase 7 to break down)
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Installer & OpenVPN Setup | 4/4 | Complete | 2026-01-08 |
-| 2. Web Portal Foundation | 2/2 | Complete | 2026-01-08 |
-| 3. Client Management | 2/2 | Complete | 2026-01-08 |
-| 4. Testing & Polish | 1/2 | In progress | - |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Installer & OpenVPN Setup | v1.0 | 4/4 | Complete | 2026-01-08 |
+| 2. Web Portal Foundation | v1.0 | 2/2 | Complete | 2026-01-08 |
+| 3. Client Management | v1.0 | 2/2 | Complete | 2026-01-08 |
+| 4. Testing & Polish | v1.0 | 2/2 | Complete | 2026-01-08 |
+| 5. Docker Prerequisites & Host Setup | v1.1 | 0/? | Not started | - |
+| 6. Containerized OpenVPN & Portal | v1.1 | 0/? | Not started | - |
+| 7. Docker Testing & Documentation | v1.1 | 0/? | Not started | - |

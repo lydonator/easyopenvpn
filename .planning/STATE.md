@@ -5,36 +5,40 @@
 See: .planning/PROJECT.md (updated 2026-01-08)
 
 **Core value:** Installation and client access must be as simple as commercial VPN providers. If it requires more than "curl | bash" to set up or more than "login and download" to get a working VPN config, it's too complex.
-**Current focus:** Phase 4 — Testing & Polish
+**Current focus:** Phase 5 — Docker Prerequisites & Host Setup (v1.1 milestone)
 
 ## Current Position
 
-Phase: 4 of 4 (Testing & Polish)
-Plan: 1 of 2 in current phase
-Status: Complete
-Last activity: 2026-01-08 — Completed 04-01-PLAN.md (Script Validation & Documentation)
+Phase: 5 of 7 (Docker Prerequisites & Host Setup)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-08 — Milestone v1.1 Docker Upgrade created
 
-Progress: ████████████████████ 50% (Phase 4: 1 of 2 plans complete)
+Progress: ░░░░░░░░░░░░░░░░░░░░ 0% (v1.1 milestone start)
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 9
-- Average duration: 10 min
+**v1.0 Milestone (Complete):**
+- Total plans completed: 10
+- Average duration: 9 min
 - Total execution time: 1.5 hours
 
-**By Phase:**
+**By Phase (v1.0):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 4/4 | 16 min | 4 min |
 | 2 | 2/2 | 32 min | 16 min |
 | 3 | 2/2 | 38 min | 19 min |
-| 4 | 1/2 | 4 min | 4 min |
+| 4 | 2/2 | 8 min | 4 min |
 
-**Recent Trend:**
-- Last 5 plans: 13 min avg
-- Trend: Phase 4 validation tasks faster than full-stack development
+**v1.1 Milestone (In Progress):**
+- Plans completed: 0
+- Phases: 5-7
+
+**Velocity Trend:**
+- v1.0 trend: Phase 4 validation faster than full-stack features
+- Starting fresh milestone with containerization work
 
 ## Accumulated Context
 
@@ -53,9 +57,14 @@ None yet.
 
 None yet.
 
+### Roadmap Evolution
+
+- v1.0 MVP completed: Phases 1-4 shipped (2026-01-08)
+- Milestone v1.1 Docker Upgrade created: Containerized deployment, 3 phases (Phase 5-7)
+
 ## Session Continuity
 
-Last session: 2026-01-08T16:04:43Z
-Stopped at: Completed 04-01-PLAN.md (Script Validation & Documentation)
+Last session: 2026-01-08T16:23:27Z
+Stopped at: Milestone v1.1 initialization
 Resume file: None
-Next: Ready for Phase 4 Plan 2 (Manual Testing & Production Validation)
+Next: Plan Phase 5 (Docker Prerequisites & Host Setup)
