@@ -69,7 +69,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Installer & OpenVPN Setup | 1/4 | In progress | - |
+| 1. Installer & OpenVPN Setup | 2/4 | In progress | - |
 | 2. Web Portal Foundation | 0/TBD | Not started | - |
 | 3. Client Management | 0/TBD | Not started | - |
 | 4. Testing & Polish | 0/TBD | Not started | - |
