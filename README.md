@@ -17,12 +17,12 @@ wget https://raw.githubusercontent.com/[user]/easyopenvpn/master/install.sh
 bash install.sh
 ```
 
-Installation completes in 2-5 minutes. Portal credentials displayed at end.
+Installation completes in 3-6 minutes. Portal credentials displayed at end.
 
 ## What You Get
 
 - OpenVPN server on UDP 1194
-- HTTPS web portal on port 8443
+- HTTPS web portal on port 443
 - Client management (create, download, delete)
 - Platform-agnostic client configs (Windows, Mac, Linux, iOS, Android)
 - Automatic firewall configuration
@@ -33,11 +33,13 @@ Installation completes in 2-5 minutes. Portal credentials displayed at end.
 - Ubuntu 22.04+ or Debian 11+
 - Fresh VPS with root access
 - Public IP address
-- Ports 1194/UDP and 8443/TCP available
+- Ports 1194/UDP and 443/TCP available
+- Docker Engine (auto-installed by script if missing)
+- Docker Compose v2 (auto-installed by script if missing)
 
 ## After Installation
 
-1. Visit `https://YOUR_SERVER_IP:8443`
+1. Visit `https://YOUR_SERVER_IP`
 2. Accept self-signed certificate warning (expected)
 3. Log in with displayed credentials
 4. Create clients, download configs, connect
@@ -66,18 +68,36 @@ Existing clients and certificates are preserved.
 
 ## Troubleshooting
 
-- **Portal not accessible:** Check firewall allows port 8443/TCP
-- **Client can't connect:** Verify port 1194/UDP not blocked
-- **Certificate error:** Normal with self-signed certs, proceed anyway
-- **Forgot password:** Re-run installer, new password displayed
+**Portal not accessible:**
+- Check containers running: `docker ps` (should show easyopenvpn-server and easyopenvpn-portal)
+- Check portal logs: `docker compose logs portal`
+- Verify firewall allows port 443/TCP: `sudo ufw status`
+
+**Client can't connect:**
+- Check OpenVPN container running: `docker ps | grep openvpn`
+- Check OpenVPN logs: `docker compose logs openvpn`
+- Verify port 1194/UDP not blocked by firewall
+
+**Certificate error:**
+- Normal with self-signed certs, proceed anyway (click "Advanced" → "Proceed")
+
+**Forgot password:**
+- Re-run installer: `bash install.sh`
+- New password will be displayed and .env updated
+
+**Container issues:**
+- Restart containers: `docker compose restart`
+- Check container status: `docker compose ps`
+- View all logs: `docker compose logs -f`
 
 ## Architecture
 
-- OpenVPN 2.x with UDP transport
-- Flask web portal (Python 3)
-- Self-signed PKI via Easy-RSA
-- Certificate revocation via CRL
-- Session-based authentication (bcrypt)
+- **Containerized deployment** via Docker Compose
+- **OpenVPN container:** Debian-based with OpenVPN 2.x, Easy-RSA PKI, automatic initialization
+- **Portal container:** Python 3.11 Flask app with HTTPS and bcrypt authentication
+- **Shared volumes:** PKI certificates, client configs, persistent data
+- **Host networking:** IP forwarding and UFW firewall rules configured by installer
+- **Self-signed certificates:** No domain required, generated automatically
 
 ## License
 
