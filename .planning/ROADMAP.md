@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Client Management** - Create/delete clients and generate platform-agnostic VPN configs
 - [x] **Phase 4: Testing & Polish** - Cross-platform validation and production readiness
 - [x] **Phase 5: Docker Prerequisites & Host Setup** - Auto-install Docker/Compose, configure host networking for containers
-- [ ] **Phase 6: Containerized OpenVPN & Portal** - Dockerfile, docker-compose orchestration, containerized services (in progress)
+- [x] **Phase 6: Containerized OpenVPN & Portal** - Dockerfile, docker-compose orchestration, containerized services
 - [ ] **Phase 7: Docker Testing & Documentation** - Container-specific testing, updated documentation
 
 ## Phase Details
@@ -103,6 +103,7 @@ Plans:
 Plans:
 - [x] 06-01: OpenVPN Container Structure - Dockerfile, docker-entrypoint.sh with PKI initialization
 - [x] 06-02: Flask Portal Container Structure - Python container, portal app migration, build verification
+- [x] 06-03: Docker Compose & Installer Migration - docker-compose.yml orchestration, simplified install.sh (1860→383 lines)
 
 #### Phase 7: Docker Testing & Documentation
 **Goal**: Update testing procedures and documentation for containerized deployment
@@ -125,5 +126,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Client Management | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 4. Testing & Polish | v1.0 | 2/2 | Complete | 2026-01-08 |
 | 5. Docker Prerequisites & Host Setup | v1.1 | 2/2 | Complete | 2026-01-08 |
-| 6. Containerized OpenVPN & Portal | v1.1 | 2/? | In progress | - |
+| 6. Containerized OpenVPN & Portal | v1.1 | 3/3 | Complete | 2026-01-08 |
 | 7. Docker Testing & Documentation | v1.1 | 0/? | Not started | - |
