@@ -17,7 +17,7 @@ None
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Installer & OpenVPN Setup** - Curl | bash installer with automated OpenVPN server configuration
-- [ ] **Phase 2: Web Portal Foundation** - HTTPS web interface with password authentication and session management
+- [~] **Phase 2: Web Portal Foundation** - HTTPS web interface with password authentication and session management
 - [ ] **Phase 3: Client Management** - Create/delete clients and generate platform-agnostic VPN configs
 - [ ] **Phase 4: Testing & Polish** - Cross-platform validation and production readiness
 
@@ -41,7 +41,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- (To be defined during phase planning)
+- [x] 02-01: HTTPS Foundation & Service Setup - Flask dependencies, SSL certificates, systemd service
 
 ### Phase 3: Client Management
 **Goal**: Full client lifecycle through web UI - create, configure, download, delete
@@ -70,6 +70,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Installer & OpenVPN Setup | 4/4 | Complete | 2026-01-08 |
-| 2. Web Portal Foundation | 0/TBD | Not started | - |
+| 2. Web Portal Foundation | 1/TBD | In progress | - |
 | 3. Client Management | 0/TBD | Not started | - |
 | 4. Testing & Polish | 0/TBD | Not started | - |

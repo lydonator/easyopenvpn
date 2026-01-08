@@ -142,6 +142,91 @@ install_packages() {
 install_packages
 
 ################################################################################
+# Web Portal Dependencies
+################################################################################
+
+install_web_dependencies() {
+    echo "Installing web portal dependencies..."
+
+    # Check if Flask is already installed (idempotency)
+    if python3 -c "import flask" &>/dev/null; then
+        echo "✓ Flask already installed, skipping"
+        python3 -c "import flask; print('  - Flask version:', flask.__version__)"
+        return 0
+    fi
+
+    # Install Python3 and Flask packages
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        python3 \
+        python3-pip \
+        python3-flask \
+        python3-werkzeug || error_exit "Failed to install web dependencies"
+
+    # Verify Flask is importable
+    if ! python3 -c "import flask" &>/dev/null; then
+        error_exit "Flask module not importable after installation"
+    fi
+
+    # Display installed version
+    echo "✓ Web dependencies installed successfully"
+    echo "  - Python3: $(python3 --version)"
+    python3 -c "import flask; print('  - Flask version:', flask.__version__)"
+}
+
+# Run web dependencies installation
+install_web_dependencies
+
+################################################################################
+# Web Portal SSL Certificate
+################################################################################
+
+generate_portal_ssl() {
+    echo "Generating self-signed SSL certificate for web portal..."
+
+    # Create portal SSL directory
+    PORTAL_SSL_DIR="/etc/openvpn/portal"
+    mkdir -p "$PORTAL_SSL_DIR" || error_exit "Failed to create portal SSL directory"
+
+    # Check if certificate already exists (idempotency)
+    if [[ -f "$PORTAL_SSL_DIR/portal.crt" && -f "$PORTAL_SSL_DIR/portal.key" ]]; then
+        echo "✓ Portal SSL certificate already exists, skipping generation"
+        # Verify existing certificate
+        if openssl x509 -in "$PORTAL_SSL_DIR/portal.crt" -text -noout | grep -q "CN.*OpenVPN Portal"; then
+            echo "  - Certificate verified"
+            return 0
+        else
+            echo "  - Warning: Existing certificate may be invalid, regenerating..."
+        fi
+    fi
+
+    # Generate self-signed certificate (10-year validity)
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "$PORTAL_SSL_DIR/portal.key" \
+        -out "$PORTAL_SSL_DIR/portal.crt" \
+        -subj "/CN=OpenVPN Portal" || error_exit "Failed to generate portal SSL certificate"
+
+    # Set correct permissions
+    chmod 600 "$PORTAL_SSL_DIR/portal.key" || error_exit "Failed to set portal.key permissions"
+    chmod 644 "$PORTAL_SSL_DIR/portal.crt" || error_exit "Failed to set portal.crt permissions"
+
+    # Verify certificate generation
+    [[ -f "$PORTAL_SSL_DIR/portal.crt" ]] || error_exit "Portal certificate not found after generation"
+    [[ -f "$PORTAL_SSL_DIR/portal.key" ]] || error_exit "Portal private key not found after generation"
+
+    # Verify certificate content
+    if ! openssl x509 -in "$PORTAL_SSL_DIR/portal.crt" -text -noout &>/dev/null; then
+        error_exit "Portal certificate validation failed"
+    fi
+
+    echo "✓ Portal SSL certificate generated successfully"
+    echo "  - Certificate: $PORTAL_SSL_DIR/portal.crt"
+    echo "  - Private key: $PORTAL_SSL_DIR/portal.key"
+}
+
+# Run portal SSL generation
+generate_portal_ssl
+
+################################################################################
 # Public IP detection
 ################################################################################
 
@@ -522,6 +607,60 @@ EOF
 # Generate first client certificate and configuration
 generate_client_cert "client1"
 create_client_ovpn "client1"
+
+################################################################################
+# Web Portal Service
+################################################################################
+
+create_portal_service() {
+    echo "Creating web portal systemd service..."
+
+    SERVICE_FILE="/etc/systemd/system/openvpn-portal.service"
+
+    # Check if service file already exists (idempotency)
+    if [[ -f "$SERVICE_FILE" ]]; then
+        echo "✓ Portal service file already exists, skipping creation"
+        return 0
+    fi
+
+    # Create portal app directory
+    mkdir -p /opt/openvpn-portal || error_exit "Failed to create portal app directory"
+
+    # Create systemd service file
+    cat > "$SERVICE_FILE" <<'EOF'
+[Unit]
+Description=EasyOpenVPN Web Portal
+After=network.target openvpn-server@server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/openvpn-portal
+ExecStart=/usr/bin/python3 /opt/openvpn-portal/app.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Verify service file created
+    [[ -f "$SERVICE_FILE" ]] || error_exit "Portal service file not created"
+
+    # Reload systemd daemon to recognize new service
+    systemctl daemon-reload || error_exit "Failed to reload systemd daemon"
+
+    # Note: We don't enable or start the service yet - app.py doesn't exist yet
+    # That will happen in Plan 2
+
+    echo "✓ Portal service created and loaded by systemd"
+    echo "  - Service file: $SERVICE_FILE"
+    echo "  - App directory: /opt/openvpn-portal"
+    echo "  - Note: Service will be enabled and started in next phase (after app.py is created)"
+}
+
+# Run portal service creation
+create_portal_service
 
 ################################################################################
 # Installation complete
