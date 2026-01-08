@@ -663,24 +663,473 @@ EOF
 create_portal_service
 
 ################################################################################
+# Flask Application Creation (Task 1)
+################################################################################
+
+create_flask_app() {
+    echo "Creating Flask application..."
+
+    APP_DIR="/opt/openvpn-portal"
+    APP_FILE="$APP_DIR/app.py"
+
+    # Create directory structure
+    mkdir -p "$APP_DIR/templates" || error_exit "Failed to create templates directory"
+    mkdir -p "$APP_DIR/static" || error_exit "Failed to create static directory"
+
+    # Check if app.py already exists (idempotency)
+    if [[ -f "$APP_FILE" ]]; then
+        echo "✓ Flask app already exists, skipping creation"
+        return 0
+    fi
+
+    # Generate unique secret key
+    SECRET_KEY=$(python3 -c "import os; print(os.urandom(24).hex())")
+
+    # Create Flask application
+    cat > "$APP_FILE" <<EOF
+#!/usr/bin/env python3
+from flask import Flask, session, redirect, render_template, request, url_for
+import bcrypt
+import os
+
+app = Flask(__name__)
+app.secret_key = '$SECRET_KEY'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+
+        # Read bcrypt hash from auth file
+        try:
+            with open('/etc/openvpn/portal/auth.txt', 'r') as f:
+                password_hash = f.read().strip()
+
+            # Verify password
+            if bcrypt.checkpw(password.encode(), password_hash.encode()):
+                session['authenticated'] = True
+                session.permanent = True
+                return redirect(url_for('dashboard'))
+            else:
+                error = 'Invalid password'
+        except Exception as e:
+            error = 'Authentication error'
+
+    return render_template('login.html', error=error)
+
+@app.route('/dashboard')
+def dashboard():
+    if not session.get('authenticated'):
+        return redirect(url_for('login'))
+
+    # Read server IP
+    try:
+        with open('/root/.openvpn-server-ip', 'r') as f:
+            server_ip = f.read().strip()
+    except:
+        server_ip = 'Unknown'
+
+    return render_template('dashboard.html', server_ip=server_ip)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8443,
+            ssl_context=('/etc/openvpn/portal/portal.crt',
+                        '/etc/openvpn/portal/portal.key'))
+EOF
+
+    # Make app.py executable
+    chmod +x "$APP_FILE" || error_exit "Failed to make app.py executable"
+
+    # Verify Python syntax
+    if ! python3 -m py_compile "$APP_FILE" &>/dev/null; then
+        error_exit "Flask app has syntax errors"
+    fi
+
+    echo "✓ Flask application created successfully"
+    echo "  - App file: $APP_FILE"
+    echo "  - Secret key generated"
+}
+
+# Run Flask app creation
+create_flask_app
+
+################################################################################
+# Password Authentication Setup (Task 2)
+################################################################################
+
+setup_portal_auth() {
+    echo "Setting up portal authentication..."
+
+    AUTH_FILE="/etc/openvpn/portal/auth.txt"
+
+    # Install python3-bcrypt if not present
+    if ! python3 -c "import bcrypt" &>/dev/null; then
+        echo "Installing bcrypt module..."
+        DEBIAN_FRONTEND=noninteractive apt-get install -y python3-bcrypt || error_exit "Failed to install python3-bcrypt"
+    fi
+
+    # Check if auth file already exists (idempotency - preserve password)
+    if [[ -f "$AUTH_FILE" ]]; then
+        echo "✓ Portal password already configured, skipping"
+        # Read existing password if stored separately, or skip displaying
+        return 0
+    fi
+
+    # Generate random password
+    PORTAL_PASSWORD=$(openssl rand -base64 16)
+
+    # Generate bcrypt hash and store
+    python3 -c "import bcrypt; print(bcrypt.hashpw('$PORTAL_PASSWORD'.encode(), bcrypt.gensalt()).decode())" > "$AUTH_FILE" || error_exit "Failed to generate password hash"
+
+    # Set restrictive permissions
+    chmod 600 "$AUTH_FILE" || error_exit "Failed to set auth.txt permissions"
+
+    # Store password for display at end (temporary)
+    echo "$PORTAL_PASSWORD" > /root/.openvpn-portal-password
+    chmod 600 /root/.openvpn-portal-password
+
+    echo "✓ Portal authentication configured"
+    echo "  - Password hash stored in: $AUTH_FILE"
+
+    # Create login.html template
+    cat > /opt/openvpn-portal/templates/login.html <<'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN Portal - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .error {
+            background-color: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #c33;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>OpenVPN Portal</h1>
+        <p class="subtitle">Enter your password to access the dashboard</p>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autofocus>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</body>
+</html>
+EOF
+
+    echo "✓ Login page created"
+}
+
+# Run portal authentication setup
+setup_portal_auth
+
+################################################################################
+# Dashboard Creation and Service Startup (Task 3)
+################################################################################
+
+finalize_portal() {
+    echo "Finalizing web portal setup..."
+
+    # Store server IP for dashboard display
+    echo "$PUBLIC_IP" > /root/.openvpn-server-ip
+    chmod 644 /root/.openvpn-server-ip
+
+    # Create dashboard.html template
+    cat > /opt/openvpn-portal/templates/dashboard.html <<'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN Portal - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            font-size: 24px;
+        }
+        .logout-link {
+            color: white;
+            text-decoration: none;
+            padding: 8px 20px;
+            border: 2px solid white;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        .logout-link:hover {
+            background: white;
+            color: #667eea;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .success-message {
+            color: #2d8;
+            font-size: 18px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #efe;
+            border-radius: 5px;
+            border-left: 4px solid #2d8;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .info-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .info-label {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+            font-family: monospace;
+        }
+        .placeholder {
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OpenVPN Portal Dashboard</h1>
+        <a href="/logout" class="logout-link">Logout</a>
+    </div>
+
+    <div class="container">
+        <div class="success-message">
+            Logged in successfully
+        </div>
+
+        <div class="card">
+            <h2>Server Information</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Public IP Address</div>
+                    <div class="info-value">{{ server_ip }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">OpenVPN Port</div>
+                    <div class="info-value">1194 UDP</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Portal Port</div>
+                    <div class="info-value">8443 HTTPS</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Client Management</h2>
+            <div class="placeholder">
+                Client management features coming in Phase 3
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    echo "✓ Dashboard page created"
+
+    # Add UFW rule for web portal
+    if ! ufw status | grep -q "8443/tcp"; then
+        ufw allow 8443/tcp comment 'OpenVPN Web Portal' || error_exit "Failed to allow portal port"
+        echo "✓ Firewall rule added for port 8443"
+    else
+        echo "✓ Firewall rule for port 8443 already exists"
+    fi
+
+    # Enable and start the portal service
+    echo "Starting web portal service..."
+    systemctl enable openvpn-portal || error_exit "Failed to enable portal service"
+    systemctl start openvpn-portal || error_exit "Failed to start portal service"
+
+    # Wait for service to start
+    sleep 3
+
+    # Verify service is running
+    if ! systemctl is-active --quiet openvpn-portal; then
+        error_exit "Portal service failed to start. Check: journalctl -u openvpn-portal -n 50"
+    fi
+
+    echo "✓ Web portal service started successfully"
+
+    # Verify port is listening
+    if ss -tlnp | grep -q ":8443"; then
+        echo "✓ Portal listening on port 8443"
+    else
+        echo "Warning: Port 8443 not detected (service may still be starting)"
+    fi
+}
+
+# Run portal finalization
+finalize_portal
+
+################################################################################
 # Installation complete
 ################################################################################
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "OpenVPN Installation Complete!"
+echo "EasyOpenVPN Installation Complete!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
-echo "Server is running on: $PUBLIC_IP:1194"
+echo "OpenVPN Server: $PUBLIC_IP:1194"
+echo ""
+echo "Web Portal: https://$PUBLIC_IP:8443"
+
+# Display portal password if it was just generated
+if [[ -f /root/.openvpn-portal-password ]]; then
+    PORTAL_PASS=$(cat /root/.openvpn-portal-password)
+    echo "Password: $PORTAL_PASS"
+    echo ""
+    echo "SAVE THIS PASSWORD - you'll need it to manage clients!"
+fi
+
 echo ""
 echo "Client configuration: $CLIENT_DIR/client1.ovpn"
 echo ""
 echo "Download this file and import it into your OpenVPN client:"
 echo "  - Windows/Mac/Linux: OpenVPN GUI or OpenVPN Connect"
 echo "  - iOS/Android: OpenVPN Connect app"
-echo ""
-echo "To create additional clients, re-run this installer"
-echo "(future: will be handled via web portal)"
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
