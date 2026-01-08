@@ -1,0 +1,196 @@
+#!/bin/bash
+
+################################################################################
+# EasyOpenVPN installer - curl | bash OpenVPN server setup
+#
+# Description:
+#   Automated installer that provisions a complete OpenVPN server with
+#   self-signed certificates, web portal, and client management.
+#
+# Usage:
+#   curl -fsSL https://your-domain.com/install.sh | bash
+#   OR
+#   wget -qO- https://your-domain.com/install.sh | bash
+#   OR
+#   bash install.sh (if downloaded locally)
+#
+# Requirements:
+#   - Ubuntu 22.04+ or Debian 11+
+#   - Run as root
+#   - Internet connectivity
+#
+# What it does:
+#   1. Detects OS and verifies compatibility
+#   2. Installs OpenVPN and Easy-RSA packages
+#   3. Generates PKI (certificates and keys)
+#   4. Configures OpenVPN server
+#   5. Sets up firewall rules
+#   6. Creates web portal for client management
+#
+################################################################################
+
+# Error handling setup
+set -o pipefail  # Catch pipeline failures
+
+# Variable declarations
+OPENVPN_DIR="/etc/openvpn/server"
+EASYRSA_DIR="/etc/openvpn/easy-rsa"
+CLIENT_DIR="/root/openvpn-clients"
+LOG_FILE="/var/log/openvpn-install.log"
+
+# Error handling function
+error_exit() {
+    echo "Error: $1" >&2
+    exit "${2:-1}"
+}
+
+# Cleanup function for temp files
+cleanup() {
+    # Remove any temporary files created during installation
+    # This will be expanded as needed
+    :
+}
+trap cleanup EXIT
+
+################################################################################
+# Pre-flight checks
+################################################################################
+
+# Root check
+if [[ $EUID -ne 0 ]]; then
+    error_exit "This script must be run as root. Please use sudo or run as root user."
+fi
+
+# OS detection
+if [[ ! -f /etc/os-release ]]; then
+    error_exit "Cannot detect operating system. /etc/os-release not found."
+fi
+
+# Source OS release file
+source /etc/os-release
+
+# Verify supported OS
+if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
+    error_exit "Unsupported OS: $ID. This script supports Ubuntu and Debian only."
+fi
+
+echo "Detected OS: $ID $VERSION_ID"
+
+# Store version for later use
+OS_VERSION="$VERSION_ID"
+
+# Idempotency check - check if OpenVPN is already installed and running
+if systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "OpenVPN server is already installed and running."
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "To manage clients, use the web portal or re-run this script"
+    echo "to add additional functionality."
+    echo ""
+    exit 0
+fi
+
+IS_INSTALLED=false
+
+################################################################################
+# Main installation starts here
+################################################################################
+
+echo "═══════════════════════════════════════════════════════════════"
+echo "EasyOpenVPN Installer"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "This will install OpenVPN server on $ID $VERSION_ID"
+echo ""
+
+################################################################################
+# Package installation
+################################################################################
+
+install_packages() {
+    echo "Installing OpenVPN and Easy-RSA..."
+
+    # Check if already installed (idempotency)
+    if dpkg -s openvpn &>/dev/null && dpkg -s easy-rsa &>/dev/null; then
+        echo "✓ Packages already installed, skipping"
+        return 0
+    fi
+
+    # Update package lists
+    apt-get update || error_exit "Failed to update package lists"
+
+    # Install packages
+    apt-get install -y openvpn easy-rsa || error_exit "Failed to install packages"
+
+    # Verify installation
+    command -v openvpn >/dev/null || error_exit "OpenVPN not found after installation"
+
+    # Check Easy-RSA location and store it
+    if [[ -d /usr/share/easy-rsa ]]; then
+        EASYRSA_PKG_DIR="/usr/share/easy-rsa"
+    else
+        error_exit "Easy-RSA package directory not found at /usr/share/easy-rsa"
+    fi
+
+    echo "✓ Packages installed successfully"
+    echo "  - OpenVPN: $(openvpn --version | head -n1)"
+    echo "  - Easy-RSA: $EASYRSA_PKG_DIR"
+}
+
+# Run package installation
+install_packages
+
+################################################################################
+# Public IP detection
+################################################################################
+
+detect_public_ip() {
+    echo "Detecting public IP address..."
+
+    # Primary method - DNS-based (most reliable)
+    PUBLIC_IP=$(dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null)
+
+    # If dig fails, try HTTP fallback
+    if [[ -z "$PUBLIC_IP" ]]; then
+        PUBLIC_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null)
+    fi
+
+    # If both fail, try second HTTP fallback
+    if [[ -z "$PUBLIC_IP" ]]; then
+        PUBLIC_IP=$(curl -s --max-time 5 icanhazip.com 2>/dev/null)
+    fi
+
+    # If all methods fail
+    if [[ -z "$PUBLIC_IP" ]]; then
+        error_exit "Could not detect public IP address. Please check network connectivity."
+    fi
+
+    # Validate IP format
+    if ! [[ "$PUBLIC_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        error_exit "Detected IP '$PUBLIC_IP' is not valid IPv4 format"
+    fi
+
+    echo "✓ Detected public IP: $PUBLIC_IP"
+}
+
+# Run public IP detection
+detect_public_ip
+
+################################################################################
+# Installation complete
+################################################################################
+
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "Installation framework complete!"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "Summary:"
+echo "  - OS: $ID $OS_VERSION"
+echo "  - OpenVPN: Installed"
+echo "  - Easy-RSA: Installed ($EASYRSA_PKG_DIR)"
+echo "  - Public IP: $PUBLIC_IP"
+echo ""
+echo "Next steps will configure OpenVPN server and certificates..."
+echo ""
