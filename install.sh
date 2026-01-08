@@ -30,6 +30,7 @@
 ################################################################################
 
 # Error handling setup
+set -e           # Exit on any error
 set -o pipefail  # Catch pipeline failures
 
 # Variable declarations
@@ -79,19 +80,25 @@ echo "Detected OS: $ID $VERSION_ID"
 # Store version for later use
 OS_VERSION="$VERSION_ID"
 
-# Idempotency check - check if OpenVPN is already installed and running
+# Detect if this is an update/re-run
 if systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
     echo "═══════════════════════════════════════════════════════════════"
-    echo "OpenVPN server is already installed and running."
+    echo "Detected existing OpenVPN installation"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    echo "To manage clients, use the web portal or re-run this script"
-    echo "to add additional functionality."
+    echo "This script is idempotent - it will:"
+    echo "  ✓ Update components that need updating"
+    echo "  ✓ Skip components that are already configured"
+    echo "  ✓ Preserve existing clients and certificates"
     echo ""
-    exit 0
+    IS_UPDATE=true
+else
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Fresh installation detected"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    IS_UPDATE=false
 fi
-
-IS_INSTALLED=false
 
 ################################################################################
 # Main installation starts here
@@ -272,7 +279,7 @@ setup_pki() {
     # Create Easy-RSA directory
     mkdir -p "$EASYRSA_DIR" || error_exit "Failed to create Easy-RSA directory"
 
-    # Copy Easy-RSA files from package location
+    # Copy Easy-RSA files from package location (idempotent - will overwrite)
     # Easy-RSA package installs to /usr/share/easy-rsa/
     if [[ -d /usr/share/easy-rsa ]]; then
         cp -r /usr/share/easy-rsa/* "$EASYRSA_DIR/" || error_exit "Failed to copy Easy-RSA files"
@@ -283,20 +290,27 @@ setup_pki() {
     # Make easyrsa executable
     chmod +x "$EASYRSA_DIR/easyrsa" || error_exit "Failed to make easyrsa executable"
 
-    # Initialize PKI structure
+    # Initialize PKI structure (idempotent check)
     cd "$EASYRSA_DIR" || error_exit "Failed to change to Easy-RSA directory"
-    ./easyrsa init-pki || error_exit "Failed to initialize PKI"
 
-    # Build Certificate Authority
-    # Use EASYRSA_BATCH=1 to avoid interactive prompts
-    # Use nopass to avoid password prompt (required for automated installer)
-    EASYRSA_BATCH=1 ./easyrsa build-ca nopass || error_exit "Failed to build CA"
+    if [[ -d pki ]] && [[ -f pki/ca.crt ]]; then
+        echo "✓ PKI already initialized, skipping"
+    else
+        echo "  Initializing PKI structure..."
+        ./easyrsa init-pki || error_exit "Failed to initialize PKI"
 
-    # Verify CA created
-    [[ -f pki/ca.crt ]] || error_exit "CA certificate not found after generation"
-    [[ -f pki/private/ca.key ]] || error_exit "CA private key not found after generation"
+        # Build Certificate Authority
+        # Use EASYRSA_BATCH=1 to avoid interactive prompts
+        # Use nopass to avoid password prompt (required for automated installer)
+        echo "  Building Certificate Authority..."
+        EASYRSA_BATCH=1 ./easyrsa build-ca nopass || error_exit "Failed to build CA"
 
-    echo "✓ PKI initialized and CA generated"
+        # Verify CA created
+        [[ -f pki/ca.crt ]] || error_exit "CA certificate not found after generation"
+        [[ -f pki/private/ca.key ]] || error_exit "CA private key not found after generation"
+
+        echo "✓ PKI initialized and CA generated"
+    fi
 }
 
 # Run PKI setup
@@ -312,29 +326,46 @@ generate_server_certs() {
     # Change to Easy-RSA directory
     cd "$EASYRSA_DIR" || error_exit "Failed to change to Easy-RSA directory"
 
-    # Generate server certificate and key
-    EASYRSA_BATCH=1 ./easyrsa build-server-full server nopass || error_exit "Failed to generate server certificate"
+    # Generate server certificate and key (idempotent check)
+    if [[ -f pki/issued/server.crt ]] && [[ -f pki/private/server.key ]]; then
+        echo "✓ Server certificate already exists, skipping"
+    else
+        echo "  Generating server certificate..."
+        EASYRSA_BATCH=1 ./easyrsa build-server-full server nopass || error_exit "Failed to generate server certificate"
 
-    # Verify server certificate created
-    [[ -f pki/issued/server.crt ]] || error_exit "Server certificate not found"
-    [[ -f pki/private/server.key ]] || error_exit "Server private key not found"
+        # Verify server certificate created
+        [[ -f pki/issued/server.crt ]] || error_exit "Server certificate not found"
+        [[ -f pki/private/server.key ]] || error_exit "Server private key not found"
+        echo "✓ Server certificate generated"
+    fi
 
-    # Generate DH parameters (2048-bit)
+    # Generate DH parameters (2048-bit) - idempotent check
     # This takes 2-5 minutes - inform user
-    echo "Generating DH parameters (this may take several minutes)..."
-    ./easyrsa gen-dh || error_exit "Failed to generate DH parameters"
+    if [[ -f pki/dh.pem ]]; then
+        echo "✓ DH parameters already exist, skipping"
+    else
+        echo "  Generating DH parameters (this may take several minutes)..."
+        ./easyrsa gen-dh || error_exit "Failed to generate DH parameters"
 
-    # Verify DH params created
-    [[ -f pki/dh.pem ]] || error_exit "DH parameters not found"
+        # Verify DH params created
+        [[ -f pki/dh.pem ]] || error_exit "DH parameters not found"
+        echo "✓ DH parameters generated"
+    fi
 
-    # Generate tls-crypt key
-    # Use openvpn --genkey command (standard method)
-    openvpn --genkey secret "$EASYRSA_DIR/pki/tc.key" || error_exit "Failed to generate tls-crypt key"
+    # Generate tls-crypt key (idempotent check)
+    if [[ -f pki/tc.key ]]; then
+        echo "✓ tls-crypt key already exists, skipping"
+    else
+        echo "  Generating tls-crypt key..."
+        # Use openvpn --genkey command (standard method)
+        openvpn --genkey secret "$EASYRSA_DIR/pki/tc.key" || error_exit "Failed to generate tls-crypt key"
 
-    # Verify tls-crypt key created
-    [[ -f pki/tc.key ]] || error_exit "tls-crypt key not found"
+        # Verify tls-crypt key created
+        [[ -f pki/tc.key ]] || error_exit "tls-crypt key not found"
+        echo "✓ tls-crypt key generated"
+    fi
 
-    # Copy certificates to OpenVPN server directory
+    # Copy certificates to OpenVPN server directory (idempotent - will overwrite)
     mkdir -p "$OPENVPN_DIR" || error_exit "Failed to create OpenVPN directory"
 
     cp pki/ca.crt "$OPENVPN_DIR/" || error_exit "Failed to copy CA certificate"
@@ -343,8 +374,14 @@ generate_server_certs() {
     cp pki/dh.pem "$OPENVPN_DIR/" || error_exit "Failed to copy DH parameters"
     cp pki/tc.key "$OPENVPN_DIR/" || error_exit "Failed to copy tls-crypt key"
 
-    # Generate initial empty CRL for certificate revocation
-    ./easyrsa gen-crl || error_exit "Failed to generate initial CRL"
+    # Generate initial CRL for certificate revocation (idempotent check)
+    if [[ -f pki/crl.pem ]]; then
+        echo "✓ CRL already exists, updating..."
+        ./easyrsa gen-crl || error_exit "Failed to update CRL"
+    else
+        echo "  Generating initial CRL..."
+        ./easyrsa gen-crl || error_exit "Failed to generate initial CRL"
+    fi
     cp pki/crl.pem "$OPENVPN_DIR/" || error_exit "Failed to copy CRL"
     chmod 644 "$OPENVPN_DIR/crl.pem" || error_exit "Failed to set CRL permissions"
 
@@ -352,7 +389,7 @@ generate_server_certs() {
     chmod 600 "$OPENVPN_DIR/server.key" || error_exit "Failed to set server key permissions"
     chmod 600 "$OPENVPN_DIR/tc.key" || error_exit "Failed to set tls-crypt key permissions"
 
-    echo "✓ Server certificates generated and installed"
+    echo "✓ Server certificates installed"
 }
 
 # Run server certificate generation
@@ -482,8 +519,14 @@ start_openvpn_service() {
     # Enable OpenVPN service to start on boot
     systemctl enable openvpn-server@server || error_exit "Failed to enable OpenVPN service"
 
-    # Start OpenVPN service
-    systemctl start openvpn-server@server || error_exit "Failed to start OpenVPN service"
+    # Start or restart OpenVPN service (idempotent)
+    if systemctl is-active --quiet openvpn-server@server; then
+        echo "  Service already running, restarting to apply any changes..."
+        systemctl restart openvpn-server@server || error_exit "Failed to restart OpenVPN service"
+    else
+        echo "  Starting service for the first time..."
+        systemctl start openvpn-server@server || error_exit "Failed to start OpenVPN service"
+    fi
 
     # Wait 2 seconds for service to initialize
     sleep 2
@@ -797,11 +840,13 @@ create_flask_app() {
     # Create Flask application
     cat > "$APP_FILE" <<EOF
 #!/usr/bin/env python3
-from flask import Flask, session, redirect, render_template, request, url_for, jsonify
+from flask import Flask, session, redirect, render_template, request, url_for, jsonify, send_file, abort
 import bcrypt
 import os
 import subprocess
 import re
+import json
+from pathlib import Path
 
 app = Flask(__name__)
 app.secret_key = '$SECRET_KEY'
@@ -938,7 +983,6 @@ def list_clients():
         clients = []
         for line in result.stdout.strip().split('\n'):
             if line:
-                import json
                 clients.append(json.loads(line))
 
         return jsonify({'clients': clients}), 200
@@ -986,6 +1030,37 @@ def delete_client():
         return jsonify({'error': 'Client deletion timed out'}), 500
     except Exception as e:
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/download/<client_name>')
+@login_required
+def download_client(client_name):
+    try:
+        # Validate client_name format to prevent path traversal
+        if not re.match(r'^[a-zA-Z0-9_-]+$', client_name):
+            abort(400)
+
+        # Construct safe file path
+        client_dir = Path('/root/openvpn-clients')
+        client_file = client_dir / f'{client_name}.ovpn'
+
+        # Verify file exists
+        if not client_file.exists():
+            abort(404)
+
+        # Verify the resolved path is still within client_dir (prevent traversal)
+        if not str(client_file.resolve()).startswith(str(client_dir.resolve())):
+            abort(403)
+
+        # Send file with proper headers
+        return send_file(
+            str(client_file),
+            mimetype='application/x-openvpn-profile',
+            as_attachment=True,
+            download_name=f'{client_name}.ovpn'
+        )
+
+    except Exception as e:
+        abort(500)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8443,
@@ -1231,15 +1306,6 @@ finalize_portal() {
             margin-bottom: 15px;
             font-size: 20px;
         }
-        .success-message {
-            color: #2d8;
-            font-size: 18px;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #efe;
-            border-radius: 5px;
-            border-left: 4px solid #2d8;
-        }
         .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1262,13 +1328,120 @@ finalize_portal() {
             font-weight: 600;
             font-family: monospace;
         }
-        .placeholder {
-            color: #666;
-            font-style: italic;
-            padding: 20px;
+        .client-list-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        .client-list-table th {
             background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #ddd;
+        }
+        .client-list-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .client-list-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
             border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-right: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+        .btn-download {
+            background: #28a745;
+            color: white;
+        }
+        .btn-download:hover {
+            background: #218838;
+        }
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-delete:hover {
+            background: #c82333;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-group input.error {
+            border-color: #dc3545;
+        }
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px 15px;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+            margin-bottom: 20px;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 15px;
+            border-radius: 5px;
+            border-left: 4px solid #dc3545;
+            margin-bottom: 20px;
+        }
+        .empty-state {
             text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
@@ -1279,9 +1452,7 @@ finalize_portal() {
     </div>
 
     <div class="container">
-        <div class="success-message">
-            Logged in successfully
-        </div>
+        <div id="message-container"></div>
 
         <div class="card">
             <h2>Server Information</h2>
@@ -1302,12 +1473,212 @@ finalize_portal() {
         </div>
 
         <div class="card">
-            <h2>Client Management</h2>
-            <div class="placeholder">
-                Client management features coming in Phase 3
+            <h2>VPN Clients</h2>
+            <div id="client-list-container">
+                <div class="loading">Loading clients...</div>
             </div>
         </div>
+
+        <div class="card">
+            <h2>Create New Client</h2>
+            <form id="create-client-form">
+                <div class="form-group">
+                    <label for="client-name">Client Name</label>
+                    <input
+                        type="text"
+                        id="client-name"
+                        name="client_name"
+                        pattern="[a-zA-Z0-9_-]+"
+                        title="Only letters, numbers, dashes, and underscores allowed"
+                        required
+                        placeholder="e.g., laptop-john, phone-mary"
+                    >
+                    <div id="client-name-error" class="error-message hidden"></div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Client</button>
+            </form>
+        </div>
     </div>
+
+    <script>
+        // Format file size in human-readable format
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Show message to user
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            const className = type === 'success' ? 'success-message' : 'alert-error';
+            container.innerHTML = `<div class="${className}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        // Load client list from API
+        async function loadClients() {
+            const container = document.getElementById('client-list-container');
+
+            try {
+                const response = await fetch('/api/clients/list');
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to load clients');
+                }
+
+                const data = await response.json();
+                const clients = data.clients || [];
+
+                if (clients.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>No VPN clients yet. Create one below to get started.</p>
+                        </div>
+                    `;
+                } else {
+                    let tableHtml = `
+                        <table class="client-list-table">
+                            <thead>
+                                <tr>
+                                    <th>Client Name</th>
+                                    <th>File Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    clients.forEach(client => {
+                        tableHtml += `
+                            <tr>
+                                <td>${client.name}</td>
+                                <td>${formatFileSize(client.size)}</td>
+                                <td>
+                                    <button class="btn btn-download" onclick="downloadClient('${client.name}')">Download</button>
+                                    <button class="btn btn-delete" onclick="deleteClient('${client.name}')">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHtml += `
+                            </tbody>
+                        </table>
+                    `;
+                    container.innerHTML = tableHtml;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="alert-error">Error loading clients: ${error.message}</div>`;
+            }
+        }
+
+        // Download client configuration
+        function downloadClient(clientName) {
+            window.location.href = `/download/${clientName}`;
+        }
+
+        // Delete client with confirmation
+        async function deleteClient(clientName) {
+            if (!confirm(`Are you sure you want to delete client "${clientName}"? This will revoke the certificate and remove the configuration file.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/clients/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ client_name: clientName })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage(data.error || 'Failed to delete client', 'error');
+                    return;
+                }
+
+                showMessage(`Client "${clientName}" deleted successfully`, 'success');
+                loadClients();
+            } catch (error) {
+                showMessage(`Error deleting client: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle create client form submission
+        document.getElementById('create-client-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const clientNameInput = document.getElementById('client-name');
+            const clientName = clientNameInput.value.trim();
+            const errorDiv = document.getElementById('client-name-error');
+
+            // Clear previous errors
+            errorDiv.classList.add('hidden');
+            clientNameInput.classList.remove('error');
+
+            // Validate client name
+            if (!clientName) {
+                errorDiv.textContent = 'Client name is required';
+                errorDiv.classList.remove('hidden');
+                clientNameInput.classList.add('error');
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_-]+$/.test(clientName)) {
+                errorDiv.textContent = 'Invalid client name. Use only letters, numbers, dashes, and underscores.';
+                errorDiv.classList.remove('hidden');
+                clientNameInput.classList.add('error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/clients/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ client_name: clientName })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage(data.error || 'Failed to create client', 'error');
+                    return;
+                }
+
+                showMessage(`Client "${clientName}" created successfully`, 'success');
+                clientNameInput.value = '';
+                loadClients();
+            } catch (error) {
+                showMessage(`Error creating client: ${error.message}`, 'error');
+            }
+        });
+
+        // Load clients on page load
+        loadClients();
+    </script>
 </body>
 </html>
 EOF
@@ -1325,7 +1696,15 @@ EOF
     # Enable and start the portal service
     echo "Starting web portal service..."
     systemctl enable openvpn-portal || error_exit "Failed to enable portal service"
-    systemctl start openvpn-portal || error_exit "Failed to start portal service"
+
+    # Start or restart portal service (idempotent)
+    if systemctl is-active --quiet openvpn-portal; then
+        echo "  Portal already running, restarting to apply changes..."
+        systemctl restart openvpn-portal || error_exit "Failed to restart portal service"
+    else
+        echo "  Starting portal for the first time..."
+        systemctl start openvpn-portal || error_exit "Failed to start portal service"
+    fi
 
     # Wait for service to start
     sleep 3
@@ -1354,19 +1733,27 @@ finalize_portal
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "EasyOpenVPN Installation Complete!"
+if [[ "$IS_UPDATE" == "true" ]]; then
+    echo "EasyOpenVPN Update Complete!"
+else
+    echo "EasyOpenVPN Installation Complete!"
+fi
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "OpenVPN Server: $PUBLIC_IP:1194"
 echo ""
 echo "Web Portal: https://$PUBLIC_IP:8443"
 
-# Display portal password if it was just generated
+# Display portal password
 if [[ -f /root/.openvpn-portal-password ]]; then
-    PORTAL_PASS=$(cat /root/.openvpn-portal-password)
-    echo "Password: $PORTAL_PASS"
-    echo ""
-    echo "SAVE THIS PASSWORD - you'll need it to manage clients!"
+    if [[ "$IS_UPDATE" == "true" ]]; then
+        echo "Password: (unchanged from previous installation)"
+    else
+        PORTAL_PASS=$(cat /root/.openvpn-portal-password)
+        echo "Password: $PORTAL_PASS"
+        echo ""
+        echo "SAVE THIS PASSWORD - you'll need it to manage clients!"
+    fi
 fi
 
 echo ""
