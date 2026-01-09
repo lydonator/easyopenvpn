@@ -6,7 +6,7 @@ One-line OpenVPN server installer for Linux VPS. Install with a single command, 
 
 ## Quick Start
 
-**One-command install** (replace `lydonator` with your GitHub username):
+**One-command install**:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lydonator/easyopenvpn/master/install.sh | sudo bash
@@ -34,8 +34,8 @@ Installation completes in 2-4 minutes. Portal credentials displayed at end.
 
 ## Requirements
 
-- Ubuntu 22.04+ or Debian 11+
-- Fresh VPS with root access
+- Ubuntu 22.04+ or Debian 11+ (should work on Ubuntu & Debian variants e.g Linux Mint)
+- Fresh VPS with root access (will work on existing VPS, does not interfere with host OS install)
 - Public IP address
 - Ports 1194/UDP and 443/TCP available
 - Docker Engine (auto-installed by script if missing)
@@ -50,7 +50,7 @@ Installation completes in 2-4 minutes. Portal credentials displayed at end.
 
 ## Client Setup
 
-**Windows/Mac/Linux:** Import .ovpn file into OpenVPN Connect
+**Windows/Mac/Linux:** Import .ovpn file into OpenVPN Connect.
 **iOS/Android:** Import via OpenVPN Connect app
 
 ## Security Notes
@@ -65,7 +65,7 @@ Installation completes in 2-4 minutes. Portal credentials displayed at end.
 Re-run installer to update web portal or apply fixes:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/[user]/easyopenvpn/master/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lydonator/easyopenvpn/master/install.sh | sudo bash
 ```
 
 Existing clients and certificates are preserved.
