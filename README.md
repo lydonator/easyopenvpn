@@ -76,17 +76,21 @@ Existing clients and certificates are preserved.
 
 ## Troubleshooting
 
+**Note:** This VPN uses zero-logging for privacy. No connection or access logs are stored. See [PRIVACY.md](PRIVACY.md) for details.
+
 **Portal not accessible:**
 - Check containers running: `docker ps` (should show easyopenvpn-server and easyopenvpn-portal)
-- Check portal logs: `docker compose logs portal`
+- Check container health: `docker inspect easyopenvpn-portal | grep Status`
 - Verify firewall allows port 443/TCP: `sudo ufw status`
+- Test connectivity: `curl -k https://localhost` (from VPS)
 
 **Client can't connect:**
 - Check OpenVPN container running: `docker ps | grep openvpn`
-- Check OpenVPN logs: `docker compose logs openvpn`
-- Verify port 1194/UDP not blocked by firewall
+- Check OpenVPN process: `docker exec easyopenvpn-server pgrep openvpn`
+- Verify port 1194/UDP not blocked: `sudo ufw status`
+- Test from VPS: `nc -u -v localhost 1194` (should connect)
 
-**Certificate error:**
+**Certificate error in browser:**
 - Normal with self-signed certs, proceed anyway (click "Advanced" → "Proceed")
 
 **Forgot password:**
@@ -96,7 +100,7 @@ Existing clients and certificates are preserved.
 **Container issues:**
 - Restart containers: `docker compose restart`
 - Check container status: `docker compose ps`
-- View all logs: `docker compose logs -f`
+- Inspect container: `docker inspect easyopenvpn-server`
 
 ## Architecture
 
