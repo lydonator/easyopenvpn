@@ -6,16 +6,16 @@ One-line OpenVPN server installer for Linux VPS. Install with a single command, 
 
 ## Quick Start
 
-**One-command install** (replace `yourusername` with your GitHub username):
+**One-command install** (replace `lydonator` with your GitHub username):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/easyopenvpn/master/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lydonator/easyopenvpn/master/install.sh | sudo bash
 ```
 
 Or download and inspect first:
 
 ```bash
-wget https://raw.githubusercontent.com/yourusername/easyopenvpn/master/install.sh
+wget https://raw.githubusercontent.com/lydonator/easyopenvpn/master/install.sh
 sudo bash install.sh
 ```
 
