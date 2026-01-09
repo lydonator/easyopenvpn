@@ -1,0 +1,31 @@
+# Environment files
+.env
+
+# Planning and development files
+.planning/
+TESTING.md
+
+# Docker volumes (if mounted locally)
+data/
+logs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Node modules (if any)
+node_modules/
