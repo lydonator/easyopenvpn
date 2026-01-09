@@ -4,13 +4,12 @@ services:
       context: ./openvpn
       dockerfile: Dockerfile
     container_name: easyopenvpn-server
+    network_mode: host
     cap_add:
       - NET_ADMIN
       - MKNOD
     devices:
       - /dev/net/tun:/dev/net/tun
-    ports:
-      - "1194:1194/udp"
     volumes:
       - openvpn-pki:/etc/openvpn/easy-rsa
       - openvpn-config:/etc/openvpn/server

@@ -103,7 +103,14 @@ sysctl -w net.ipv4.ip_forward=1 || echo "⚠ Could not set IP forwarding (requir
 
 # Set up iptables NAT for VPN subnet
 echo "🔥 Configuring iptables NAT..."
-iptables -t nat -A POSTROUTING -s ${VPN_SUBNET}/24 -o eth0 -j MASQUERADE
+# Detect the default route interface (internet-facing interface)
+DEFAULT_IFACE=$(ip route | grep '^default' | awk '{print $5}' | head -n1)
+if [ -z "$DEFAULT_IFACE" ]; then
+    echo "⚠ Could not detect default network interface, using eth0"
+    DEFAULT_IFACE="eth0"
+fi
+echo "  Using interface: $DEFAULT_IFACE"
+iptables -t nat -A POSTROUTING -s ${VPN_SUBNET}/24 -o $DEFAULT_IFACE -j MASQUERADE
 
 echo "✅ OpenVPN initialization complete, starting server..."
 

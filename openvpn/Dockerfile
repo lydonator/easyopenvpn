@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     openvpn \
     easy-rsa \
     iptables \
+    iproute2 \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
