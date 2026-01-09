@@ -30,7 +30,7 @@ Installation completes in 2-4 minutes. Portal credentials displayed at end.
 ## What You Get
 
 - OpenVPN server on UDP 1194
-- HTTPS web portal on port 443
+- HTTPS web portal on port 443 (8443 if 443 in use)
 - Client management (create, download, delete)
 - Platform-agnostic client configs (Windows, Mac, Linux, iOS, Android)
 - Automatic firewall configuration
@@ -41,7 +41,7 @@ Installation completes in 2-4 minutes. Portal credentials displayed at end.
 - Ubuntu 22.04+ or Debian 11+ (should work on Ubuntu & Debian variants e.g Linux Mint)
 - Fresh VPS with root access (will work on existing VPS, does not interfere with host OS install)
 - Public IP address
-- Ports 1194/UDP and 443/TCP available (if 442 is in use for web apps you have, it will try 8443)
+- Ports 1194/UDP and 443/TCP available (if 443 is in use for web apps you have, it will try 8443)
 - Docker Engine (auto-installed by script if missing)
 - Docker Compose v2 (auto-installed by script if missing)
 
