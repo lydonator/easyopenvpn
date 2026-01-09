@@ -36,7 +36,7 @@ if [ ! -f "${PKI_DIR}/ca.crt" ]; then
     ./easyrsa gen-dh
 
     echo "🔒 Generating TLS auth key..."
-    openvpn --genkey secret /etc/openvpn/server/ta.key
+    openvpn --genkey secret ${PKI_DIR}/ta.key
 
     echo "✅ PKI initialization complete"
 else
@@ -63,7 +63,7 @@ ca ${PKI_DIR}/ca.crt
 cert ${PKI_DIR}/issued/server.crt
 key ${PKI_DIR}/private/server.key
 dh ${PKI_DIR}/dh.pem
-tls-auth /etc/openvpn/server/ta.key 0
+tls-auth ${PKI_DIR}/ta.key 0
 
 # Network configuration
 server ${VPN_SUBNET} ${VPN_NETMASK}
