@@ -219,21 +219,25 @@ def delete_client(client_name):
         # Change to Easy-RSA directory
         os.chdir(EASYRSA_DIR)
 
-        # Revoke client certificate
-        subprocess.run(
-            ['./easyrsa', '--batch', 'revoke', client_name],
-            check=True,
-            capture_output=True,
-            timeout=30
-        )
+        # Check if certificate exists before trying to revoke
+        cert_file = f'{EASYRSA_DIR}/pki/issued/{client_name}.crt'
+        if os.path.exists(cert_file):
+            # Revoke client certificate
+            subprocess.run(
+                ['./easyrsa', '--batch', 'revoke', client_name],
+                check=True,
+                capture_output=True,
+                timeout=30
+            )
 
-        # Regenerate CRL (stored in PKI directory, accessible by OpenVPN via shared volume)
-        subprocess.run(
-            ['./easyrsa', 'gen-crl'],
-            check=True,
-            capture_output=True,
-            timeout=30
-        )
+            # Regenerate CRL (stored in PKI directory, accessible by OpenVPN via shared volume)
+            subprocess.run(
+                ['./easyrsa', 'gen-crl'],
+                check=True,
+                capture_output=True,
+                timeout=30
+            )
+        # else: Certificate doesn't exist (orphaned config), skip revocation
 
         # Note: CRL is in pki/crl.pem and accessible to OpenVPN via shared volume
         # No need to copy - both containers share the openvpn-pki volume
