@@ -19,12 +19,8 @@ COPY app/ /app/
 # Create necessary directories
 RUN mkdir -p /app/certs /app/data
 
-# Create non-root user
-RUN useradd -m -u 1000 vpnuser && \
-    chown -R vpnuser:vpnuser /app
-
-# Switch to non-root user
-USER vpnuser
+# Note: Running as root is required for Easy-RSA operations on PKI directory
+# The portal needs write access to /etc/openvpn/easy-rsa/pki owned by root
 
 # Expose HTTPS port
 EXPOSE 443
