@@ -4,6 +4,10 @@
 
 One-line OpenVPN server installer for Linux VPS. Install with a single command, manage clients through a web portal, download configs and connect. Built for individuals who want commercial VPN provider simplicity on their own infrastructure.
 
+## Why I built it?
+
+Because privacy is a right, not a privilege. When governments decide that we don't deserve privacy in the name of protecting others, then our rights are being trampled on, and that's a slippery slope I'm not comfortable with. When that slippery slope starts to target commercial point and click VPN providers, then we must have cheap alternate solutions that are much more difficult to target, and 'almost' as easy to setup.  
+
 ## Quick Start
 
 **One-command install**:
