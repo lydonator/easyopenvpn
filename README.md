@@ -6,16 +6,20 @@ One-line OpenVPN server installer for Linux VPS. Install with a single command, 
 
 ## Quick Start
 
+**One-command install** (replace `yourusername` with your GitHub username):
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/[user]/easyopenvpn/master/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/easyopenvpn/master/install.sh | sudo bash
 ```
 
 Or download and inspect first:
 
 ```bash
-wget https://raw.githubusercontent.com/[user]/easyopenvpn/master/install.sh
-bash install.sh
+wget https://raw.githubusercontent.com/yourusername/easyopenvpn/master/install.sh
+sudo bash install.sh
 ```
+
+The installer is completely self-contained - it downloads Docker images from Docker Hub and generates all configuration files automatically.
 
 Installation completes in 2-4 minutes. Portal credentials displayed at end.
 
