@@ -30,5 +30,5 @@ USER vpnuser
 # Expose HTTPS port
 EXPOSE 443
 
-# Run Flask application
-CMD ["python", "app.py"]
+# Run Flask application with Gunicorn (production WSGI server)
+CMD ["gunicorn", "--bind", "0.0.0.0:443", "--certfile", "/app/certs/cert.pem", "--keyfile", "/app/certs/key.pem", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

@@ -48,7 +48,11 @@ fi
 echo "🔐 Setting PKI directory permissions for shared access..."
 chgrp -R 1000 /etc/openvpn/easy-rsa/pki
 chmod -R g+rwX /etc/openvpn/easy-rsa/pki
-echo "✅ PKI permissions configured"
+
+# Restrict server private key to root only (portal doesn't need it)
+chmod 600 /etc/openvpn/easy-rsa/pki/private/server.key
+chown root:root /etc/openvpn/easy-rsa/pki/private/server.key
+echo "✅ PKI permissions configured (server.key restricted to root)"
 
 # Generate OpenVPN server configuration
 echo "📝 Generating OpenVPN server configuration..."
@@ -57,6 +61,7 @@ cat > ${SERVER_CONF} <<EOF
 port ${VPN_PORT}
 proto ${VPN_PROTOCOL}
 dev tun
+topology subnet
 
 # SSL/TLS certificates and keys
 ca ${PKI_DIR}/ca.crt
@@ -64,6 +69,7 @@ cert ${PKI_DIR}/issued/server.crt
 key ${PKI_DIR}/private/server.key
 dh ${PKI_DIR}/dh.pem
 tls-auth ${PKI_DIR}/ta.key 0
+crl-verify ${PKI_DIR}/crl.pem
 
 # Network configuration
 server ${VPN_SUBNET} ${VPN_NETMASK}

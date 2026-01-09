@@ -227,7 +227,7 @@ def delete_client(client_name):
             timeout=30
         )
 
-        # Regenerate CRL
+        # Regenerate CRL (stored in PKI directory, accessible by OpenVPN via shared volume)
         subprocess.run(
             ['./easyrsa', 'gen-crl'],
             check=True,
@@ -235,11 +235,8 @@ def delete_client(client_name):
             timeout=30
         )
 
-        # Copy updated CRL to OpenVPN directory
-        subprocess.run(
-            ['cp', f'{EASYRSA_DIR}/pki/crl.pem', '/etc/openvpn/server/crl.pem'],
-            check=True
-        )
+        # Note: CRL is in pki/crl.pem and accessible to OpenVPN via shared volume
+        # No need to copy - both containers share the openvpn-pki volume
 
         # Remove client configuration file
         if os.path.exists(client_file):
@@ -253,7 +250,8 @@ def delete_client(client_name):
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Client deletion timed out'}), 500
     except subprocess.CalledProcessError as e:
-        return jsonify({'error': f'Failed to delete client: {e.stderr.decode()}'}), 500
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        return jsonify({'error': f'Failed to delete client: {error_msg}'}), 500
     except Exception as e:
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
