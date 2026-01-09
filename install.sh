@@ -135,15 +135,15 @@ verify_docker_prerequisites
 configure_host_networking() {
     echo "Configuring host networking for containers..."
 
-    # Task 1: Configure UFW firewall rules for container ports
+    # Task 1: Configure UFW firewall rules for OpenVPN port
+    # Note: Portal port configured later after port selection
     if command -v ufw &>/dev/null; then
-        echo "  Configuring firewall rules for container ports..."
+        echo "  Configuring firewall rules for OpenVPN..."
         ufw allow 1194/udp comment 'OpenVPN container' 2>/dev/null || true
-        ufw allow 443/tcp comment 'Web portal container' 2>/dev/null || true
 
         if ufw status | grep -q "Status: active"; then
-            ufw reload
-            echo "✓ Firewall rules configured"
+            ufw reload >/dev/null 2>&1
+            echo "✓ Firewall rule configured for OpenVPN"
         else
             echo "⚠ UFW installed but inactive. Please enable UFW manually: ufw enable"
         fi
@@ -234,6 +234,59 @@ detect_public_ip() {
 
 # Run public IP detection
 detect_public_ip
+
+################################################################################
+# Portal Port Selection
+################################################################################
+
+select_portal_port() {
+    echo "Checking portal port availability..."
+
+    # Check if port 443 is in use
+    if ss -tulpn | grep -q ":443 "; then
+        echo ""
+        echo "⚠ Port 443 is already in use (likely web server)"
+        echo ""
+        echo "Please choose an alternate port for the web portal:"
+        read -p "Portal port [default: 8443]: " PORTAL_PORT
+        PORTAL_PORT=${PORTAL_PORT:-8443}
+
+        # Validate port number
+        if ! [[ "$PORTAL_PORT" =~ ^[0-9]+$ ]] || [ "$PORTAL_PORT" -lt 1 ] || [ "$PORTAL_PORT" -gt 65535 ]; then
+            error_exit "Invalid port number: $PORTAL_PORT"
+        fi
+
+        # Check if chosen port is also in use
+        if ss -tulpn | grep -q ":$PORTAL_PORT "; then
+            error_exit "Port $PORTAL_PORT is also in use. Please choose a different port."
+        fi
+
+        echo "✓ Portal will use port $PORTAL_PORT"
+    else
+        PORTAL_PORT=443
+        echo "✓ Port 443 available, portal will use standard HTTPS port"
+    fi
+}
+
+# Run portal port selection
+select_portal_port
+
+################################################################################
+# Portal Firewall Configuration
+################################################################################
+
+configure_portal_firewall() {
+    # Configure UFW to allow the selected portal port
+    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+        echo "Configuring firewall for portal port $PORTAL_PORT..."
+        ufw allow $PORTAL_PORT/tcp comment 'Web portal container' 2>/dev/null || true
+        ufw reload >/dev/null 2>&1
+        echo "✓ Firewall configured for portal on port $PORTAL_PORT"
+    fi
+}
+
+# Run portal firewall configuration
+configure_portal_firewall
 
 ################################################################################
 # Password Hash Generation
@@ -327,7 +380,7 @@ generate_env_file
 generate_docker_compose() {
     echo "Generating docker-compose.yml..."
 
-    cat > docker-compose.yml <<'EOF'
+    cat > docker-compose.yml <<EOF
 services:
   openvpn:
     image: lydo/easyopenvpn-server:latest
@@ -342,7 +395,7 @@ services:
       - openvpn-pki:/etc/openvpn/easy-rsa
       - openvpn-config:/etc/openvpn/server
     environment:
-      - SERVER_IP=${SERVER_IP}
+      - SERVER_IP=\${SERVER_IP}
       - VPN_SUBNET=10.8.0.0
       - VPN_NETMASK=255.255.255.0
       - VPN_PORT=1194
@@ -363,15 +416,15 @@ services:
     depends_on:
       - openvpn
     ports:
-      - "443:443/tcp"
+      - "${PORTAL_PORT}:443/tcp"
     volumes:
       - openvpn-pki:/etc/openvpn/easy-rsa
       - portal-certs:/app/certs
       - portal-data:/app/data
     environment:
-      - PORTAL_PASSWORD_HASH=${PORTAL_PASSWORD_HASH}
-      - SESSION_SECRET=${SESSION_SECRET}
-      - SERVER_IP=${SERVER_IP}
+      - PORTAL_PASSWORD_HASH=\${PORTAL_PASSWORD_HASH}
+      - SESSION_SECRET=\${SESSION_SECRET}
+      - SERVER_IP=\${SERVER_IP}
     restart: unless-stopped
     logging:
       driver: none
@@ -461,7 +514,11 @@ echo "════════════════════════�
 echo ""
 echo "OpenVPN Server: $PUBLIC_IP:1194"
 echo ""
-echo "Web Portal: https://$PUBLIC_IP"
+if [[ "$PORTAL_PORT" == "443" ]]; then
+    echo "Web Portal: https://$PUBLIC_IP"
+else
+    echo "Web Portal: https://$PUBLIC_IP:$PORTAL_PORT"
+fi
 if [[ -n "$PORTAL_PASSWORD" ]]; then
     echo "Password: $PORTAL_PASSWORD"
 fi
@@ -469,7 +526,6 @@ echo ""
 echo "Use the web portal to create and manage VPN client certificates."
 echo ""
 echo "Useful commands:"
-echo "  - View logs: docker compose logs -f"
 echo "  - Stop containers: docker compose stop"
 echo "  - Start containers: docker compose start"
 echo "  - Restart containers: docker compose restart"
