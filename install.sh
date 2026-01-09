@@ -344,10 +344,10 @@ deploy_containers() {
         fi
     fi
 
-    # Build images
-    echo "Building container images (this may take several minutes)..."
-    docker compose build || error_exit "Failed to build container images"
-    echo "✓ Container images built"
+    # Pull images from Docker Hub
+    echo "Pulling container images from Docker Hub..."
+    docker compose pull || error_exit "Failed to pull container images"
+    echo "✓ Container images pulled"
 
     # Start containers
     echo "Starting containers..."

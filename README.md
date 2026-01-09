@@ -17,7 +17,7 @@ wget https://raw.githubusercontent.com/[user]/easyopenvpn/master/install.sh
 bash install.sh
 ```
 
-Installation completes in 3-6 minutes. Portal credentials displayed at end.
+Installation completes in 2-4 minutes. Portal credentials displayed at end.
 
 ## What You Get
 

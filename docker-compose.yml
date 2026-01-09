@@ -1,8 +1,6 @@
 services:
   openvpn:
-    build:
-      context: ./openvpn
-      dockerfile: Dockerfile
+    image: lydo/easyopenvpn-server:latest
     container_name: easyopenvpn-server
     network_mode: host
     cap_add:
@@ -29,9 +27,7 @@ services:
       retries: 3
 
   portal:
-    build:
-      context: ./portal
-      dockerfile: Dockerfile
+    image: lydo/easyopenvpn-portal:latest
     container_name: easyopenvpn-portal
     depends_on:
       - openvpn
