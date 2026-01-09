@@ -73,7 +73,7 @@ crl-verify ${PKI_DIR}/crl.pem
 
 # Network configuration
 server ${VPN_SUBNET} ${VPN_NETMASK}
-ifconfig-pool-persist /var/log/openvpn/ipp.txt
+# Note: No ifconfig-pool-persist - client IP assignments not logged
 
 # Push routes to clients
 push "redirect-gateway def1 bypass-dhcp"
@@ -90,9 +90,8 @@ group nogroup
 persist-key
 persist-tun
 
-# Logging
-status /var/log/openvpn/status.log
-verb 3
+# Logging: Minimal (errors only, no connection logs)
+verb 0
 EOF
 
 echo "✅ Server configuration generated"

@@ -341,7 +341,6 @@ services:
     volumes:
       - openvpn-pki:/etc/openvpn/easy-rsa
       - openvpn-config:/etc/openvpn/server
-      - openvpn-logs:/var/log/openvpn
     environment:
       - SERVER_IP=${SERVER_IP}
       - VPN_SUBNET=10.8.0.0
@@ -350,6 +349,8 @@ services:
       - VPN_PROTOCOL=udp
       - DNS_SERVER=8.8.8.8
     restart: unless-stopped
+    logging:
+      driver: none
     healthcheck:
       test: ["CMD", "pgrep", "-x", "openvpn"]
       interval: 30s
@@ -372,6 +373,8 @@ services:
       - SESSION_SECRET=${SESSION_SECRET}
       - SERVER_IP=${SERVER_IP}
     restart: unless-stopped
+    logging:
+      driver: none
 
 volumes:
   openvpn-pki:

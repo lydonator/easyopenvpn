@@ -31,4 +31,5 @@ USER vpnuser
 EXPOSE 443
 
 # Run Flask application with Gunicorn (production WSGI server)
-CMD ["gunicorn", "--bind", "0.0.0.0:443", "--certfile", "/app/certs/cert.pem", "--keyfile", "/app/certs/key.pem", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# No access logging for privacy - only critical errors logged
+CMD ["gunicorn", "--bind", "0.0.0.0:443", "--certfile", "/app/certs/cert.pem", "--keyfile", "/app/certs/key.pem", "--access-logfile", "/dev/null", "--error-logfile", "/dev/null", "--log-level", "critical", "app:app"]
