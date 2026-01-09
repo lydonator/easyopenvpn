@@ -327,6 +327,9 @@ generate_password_hash() {
     # Generate bcrypt hash
     PORTAL_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('$PORTAL_PASSWORD'.encode(), bcrypt.gensalt()).decode())")
 
+    # Escape dollar signs for docker-compose .env file (bcrypt hashes contain $)
+    PORTAL_PASSWORD_HASH_ESCAPED="${PORTAL_PASSWORD_HASH//\$/\$\$}"
+
     echo "✓ Password hash generated"
 }
 
@@ -351,8 +354,8 @@ generate_env_file() {
 # Server public IP address
 SERVER_IP=$PUBLIC_IP
 
-# Portal authentication
-PORTAL_PASSWORD_HASH=$PORTAL_PASSWORD_HASH
+# Portal authentication (dollar signs escaped for docker-compose)
+PORTAL_PASSWORD_HASH=$PORTAL_PASSWORD_HASH_ESCAPED
 
 # Flask session secret
 SESSION_SECRET=$SESSION_SECRET
