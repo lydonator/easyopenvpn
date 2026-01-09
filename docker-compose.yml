@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   openvpn:
     build:
@@ -41,7 +39,7 @@ services:
     ports:
       - "443:443/tcp"
     volumes:
-      - openvpn-pki:/etc/openvpn/easy-rsa:ro
+      - openvpn-pki:/etc/openvpn/easy-rsa
       - portal-certs:/app/certs
       - portal-data:/app/data
     environment:

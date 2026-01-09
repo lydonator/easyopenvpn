@@ -5,7 +5,7 @@
 #
 # Description:
 #   Automated installer that deploys containerized OpenVPN server with
-#   web portal using Docker Compose. Simplified from v1.0 host-based installer.
+#   web portal using Docker Compose.
 #
 # Usage:
 #   curl -fsSL https://your-domain.com/install.sh | bash
@@ -287,7 +287,13 @@ EOF
     # Set secure permissions
     chmod 600 .env
 
-    echo "✓ Environment file created: .env"
+    # Fix ownership if script was run with sudo
+    if [[ -n "$SUDO_USER" ]]; then
+        chown "$SUDO_USER:$SUDO_USER" .env
+        echo "✓ Environment file created: .env (owned by $SUDO_USER)"
+    else
+        echo "✓ Environment file created: .env"
+    fi
 }
 
 # Run environment file generation
