@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app/ /app/
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+
 # Create necessary directories
 RUN mkdir -p /app/certs /app/data
 
@@ -31,5 +35,5 @@ USER vpnuser
 EXPOSE 443
 
 # Run Flask application with Gunicorn (production WSGI server)
-# No access logging for privacy - only critical errors logged
-CMD ["gunicorn", "--bind", "0.0.0.0:443", "--certfile", "/app/certs/cert.pem", "--keyfile", "/app/certs/key.pem", "--access-logfile", "/dev/null", "--error-logfile", "/dev/null", "--log-level", "critical", "app:app"]
+# Entrypoint generates SSL certs if needed, then starts Gunicorn
+CMD ["/app/entrypoint.sh"]

@@ -38,9 +38,19 @@ if [ ! -f "${PKI_DIR}/ca.crt" ]; then
     echo "🔒 Generating TLS auth key..."
     openvpn --genkey secret ${PKI_DIR}/ta.key
 
+    echo "📋 Generating initial CRL (Certificate Revocation List)..."
+    ./easyrsa gen-crl
+
     echo "✅ PKI initialization complete"
 else
     echo "✅ PKI already exists, skipping initialization"
+fi
+
+# Ensure CRL exists (generate if missing)
+if [ ! -f "${PKI_DIR}/crl.pem" ]; then
+    echo "📋 Generating CRL..."
+    cd /etc/openvpn/easy-rsa
+    ./easyrsa gen-crl
 fi
 
 # Set PKI directory permissions for shared access with portal container
