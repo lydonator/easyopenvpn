@@ -43,6 +43,13 @@ else
     echo "✅ PKI already exists, skipping initialization"
 fi
 
+# Set PKI directory permissions for shared access with portal container
+# Group 1000 matches the vpnuser GID in portal container
+echo "🔐 Setting PKI directory permissions for shared access..."
+chgrp -R 1000 /etc/openvpn/easy-rsa/pki
+chmod -R g+rwX /etc/openvpn/easy-rsa/pki
+echo "✅ PKI permissions configured"
+
 # Generate OpenVPN server configuration
 echo "📝 Generating OpenVPN server configuration..."
 cat > ${SERVER_CONF} <<EOF

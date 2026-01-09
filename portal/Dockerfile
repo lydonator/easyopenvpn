@@ -19,8 +19,13 @@ COPY app/ /app/
 # Create necessary directories
 RUN mkdir -p /app/certs /app/data
 
-# Note: Running as root is required for Easy-RSA operations on PKI directory
-# The portal needs write access to /etc/openvpn/easy-rsa/pki owned by root
+# Create non-root user with GID 1000 to match PKI directory group
+RUN groupadd -g 1000 vpngroup && \
+    useradd -m -u 1000 -g 1000 vpnuser && \
+    chown -R vpnuser:vpngroup /app
+
+# Switch to non-root user
+USER vpnuser
 
 # Expose HTTPS port
 EXPOSE 443
