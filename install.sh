@@ -172,6 +172,27 @@ configure_host_networking() {
         echo "✓ UFW forward policy configured"
     fi
 
+    # Task 3: Configure UFW routing rules for VPN tunnel traffic
+    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+        echo "  Configuring UFW routing rules for VPN tunnel..."
+
+        # Detect the default network interface (internet-facing)
+        DEFAULT_IFACE=$(ip route | grep '^default' | awk '{print $5}' | head -n1)
+
+        if [[ -n "$DEFAULT_IFACE" ]]; then
+            # Allow VPN traffic to be forwarded between tun0 and internet interface
+            ufw route allow in on tun0 out on "$DEFAULT_IFACE" comment 'VPN to internet' >/dev/null 2>&1 || true
+            ufw route allow in on "$DEFAULT_IFACE" out on tun0 comment 'Internet to VPN' >/dev/null 2>&1 || true
+
+            if ufw status | grep -q "Status: active"; then
+                ufw reload >/dev/null 2>&1
+            fi
+            echo "✓ UFW VPN routing rules configured (tun0 ↔ $DEFAULT_IFACE)"
+        else
+            echo "⚠ Could not detect default network interface, skipping UFW route rules"
+        fi
+    fi
+
     echo "✓ Host networking configured for containers"
 }
 
